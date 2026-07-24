@@ -2,7 +2,7 @@ name: Release Android (APK + AAB)
 
 # Trigger manually from the Actions tab, or automatically on version tags
 # like v1.0.0. Manual runs let you set/override the icon URL and version
-# without needing a new commit.
+# without needing a new commit
 on:
   workflow_dispatch:
     inputs:
