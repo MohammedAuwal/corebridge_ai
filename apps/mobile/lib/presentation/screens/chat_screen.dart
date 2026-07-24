@@ -46,6 +46,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
 
     final sendMessageUseCase = ref.read(sendMessageUseCaseProvider);
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? 'local-draft-user';
 
     // Provider + model both come from AiModels, not a hardcoded string —
     // update apps/mobile/lib/core/constants/ai_models.dart when a
@@ -55,6 +56,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     try {
       await for (final partial in sendMessageUseCase(
+        uid: uid,
         conversationId: 'local-draft',
         userMessage: text,
         history: _messages.where((m) => m.id != placeholderId).toList(),

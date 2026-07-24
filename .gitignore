@@ -41,4 +41,4 @@ ios/Flutter/.last_build_id
 
 # Supabase local dev (if you use supabase cli later)
 supabase/.temp/
-supabase/.env
+supabase/.envnode_modules/

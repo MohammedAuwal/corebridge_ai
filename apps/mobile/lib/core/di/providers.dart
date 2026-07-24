@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
 import '../../data/remote/cloudinary/cloudinary_service.dart';
 import '../../data/remote/firebase/firebase_service.dart';
@@ -10,10 +10,12 @@ import '../../data/repositories_impl/artifact_repository_impl.dart';
 import '../../data/repositories_impl/conversation_repository_impl.dart';
 import '../../data/repositories_impl/file_repository_impl.dart';
 import '../../data/repositories_impl/project_repository_impl.dart';
+import '../../data/repositories_impl/user_settings_repository_impl.dart';
 import '../../domain/repositories/artifact_repository.dart';
 import '../../domain/repositories/conversation_repository.dart';
 import '../../domain/repositories/file_repository.dart';
 import '../../domain/repositories/project_repository.dart';
+import '../../domain/repositories/user_settings_repository.dart';
 import '../../domain/usecases/create_artifact_usecase.dart';
 import '../../domain/usecases/send_message_usecase.dart';
 
@@ -49,7 +51,7 @@ final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
 final conversationRepositoryProvider = Provider<ConversationRepository>((ref) {
   return ConversationRepositoryImpl(
     ref.watch(firestoreProvider),
-    ref.watch(supabaseClientProvider),
+    ref.watch(firebaseAuthProvider).currentUser?.uid ?? '',
   );
 });
 
@@ -64,8 +66,15 @@ final fileRepositoryProvider = Provider<FileRepository>((ref) {
   );
 });
 
+final userSettingsRepositoryProvider = Provider<UserSettingsRepository>((ref) {
+  return UserSettingsRepositoryImpl(ref.watch(firestoreProvider));
+});
+
 final sendMessageUseCaseProvider = Provider<SendMessageUseCase>((ref) {
-  return SendMessageUseCase(ref.watch(conversationRepositoryProvider));
+  return SendMessageUseCase(
+    ref.watch(conversationRepositoryProvider),
+    ref.watch(userSettingsRepositoryProvider),
+  );
 });
 
 final createArtifactUseCaseProvider = Provider<CreateArtifactUseCase>((ref) {

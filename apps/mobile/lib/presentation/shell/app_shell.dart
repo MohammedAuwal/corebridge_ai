@@ -14,7 +14,7 @@ class AppShell extends StatelessWidget {
     _NavDestination('/artifacts', LucideIcons.fileCode, 'Artifacts'),
     _NavDestination('/files', LucideIcons.files, 'Files'),
     _NavDestination('/knowledge-base', LucideIcons.bookOpen, 'Knowledge'),
-    _NavDestination('/prompt-library', LucideIcons.libraryBig, 'Prompts'),
+    _NavDestination('/prompt-library', LucideIcons.library, 'Prompts'),
     _NavDestination('/history', LucideIcons.history, 'History'),
     _NavDestination('/settings', LucideIcons.settings, 'Settings'),
   ];
