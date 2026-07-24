@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "420062941894",
+    "project_id": "corebridge-ai",
+    "storage_bucket": "corebridge-ai.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:420062941894:android:e2e20a7d58a6dec4c1bdc7",
+        "android_client_info": {
+          "package_name": "com.corebridgetechs.coreai"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "420062941894-bh3grsgeqbclukbjkh8ctgaeu2c0k4r4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQDnl4kNUEZl49E2qO-GilypiCBVlkRNc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "420062941894-bh3grsgeqbclukbjkh8ctgaeu2c0k4r4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

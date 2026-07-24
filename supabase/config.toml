@@ -1,0 +1,4 @@
+project_id = "corebridge-ai"
+
+[functions.ai-router]
+verify_jwt = false

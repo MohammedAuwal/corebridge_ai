@@ -1,0 +1,44 @@
+# ============================================================
+# CodeReach AI — .gitignore
+# ============================================================
+
+# Dart/Flutter/Pub
+.dart_tool/
+.packages
+.pub/
+.pub-cache/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/App.framework
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/.last_build_id
+
+# Android
+
+
+# Mac
+.DS_Store
+
+# Logs
+*.log
+
+# Env / secrets
+.env
+.env.*
+**/secrets/**
+**/*.keystore
+
+# Supabase local dev (if you use supabase cli later)
+supabase/.temp/
+supabase/.env
