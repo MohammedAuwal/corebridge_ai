@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/di/providers.dart';
-import '../../data/repositories_impl/user_settings_repository.dart';
+import '../../domain/entities/user_api_keys.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -28,7 +28,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final uid = ref.read(firebaseServiceProvider).currentUserId;
     if (uid == null) return;
 
-    final repo = UserSettingsRepository(ref.read(firestoreProvider));
+    final repo = ref.read(userSettingsRepositoryProvider);
     final keys = await repo.getApiKeys(uid);
 
     setState(() {
@@ -46,7 +46,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     setState(() => _isSaving = true);
 
-    final repo = UserSettingsRepository(ref.read(firestoreProvider));
+    final repo = ref.read(userSettingsRepositoryProvider);
     await repo.saveApiKeys(
       uid,
       UserApiKeys(

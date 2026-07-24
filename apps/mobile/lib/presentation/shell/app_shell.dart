@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons/lucide_icons.dart';
 
 class AppShell extends StatelessWidget {
   final Widget child;
@@ -8,15 +7,15 @@ class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.child});
 
   static const _destinations = [
-    _NavDestination('/home', LucideIcons.home, 'Home'),
-    _NavDestination('/chat', LucideIcons.messageSquare, 'Chat'),
-    _NavDestination('/projects', LucideIcons.folderKanban, 'Projects'),
-    _NavDestination('/artifacts', LucideIcons.fileCode, 'Artifacts'),
-    _NavDestination('/files', LucideIcons.files, 'Files'),
-    _NavDestination('/knowledge-base', LucideIcons.bookOpen, 'Knowledge'),
-    _NavDestination('/prompt-library', LucideIcons.library, 'Prompts'),
-    _NavDestination('/history', LucideIcons.history, 'History'),
-    _NavDestination('/settings', LucideIcons.settings, 'Settings'),
+    _NavDestination('/home', Icons.home_outlined, 'Home'),
+    _NavDestination('/chat', Icons.chat_bubble_outline, 'Chat'),
+    _NavDestination('/projects', Icons.folder_special_outlined, 'Projects'),
+    _NavDestination('/artifacts', Icons.code_outlined, 'Artifacts'),
+    _NavDestination('/files', Icons.folder_copy_outlined, 'Files'),
+    _NavDestination('/knowledge-base', Icons.menu_book_outlined, 'Knowledge'),
+    _NavDestination('/prompt-library', Icons.library_books_outlined, 'Prompts'),
+    _NavDestination('/history', Icons.history_outlined, 'History'),
+    _NavDestination('/settings', Icons.settings_outlined, 'Settings'),
   ];
 
   int _currentIndex(BuildContext context) {

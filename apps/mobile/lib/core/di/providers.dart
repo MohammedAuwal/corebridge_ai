@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide User;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/remote/cloudinary/cloudinary_service.dart';
 import '../../data/remote/firebase/firebase_service.dart';
@@ -23,6 +23,11 @@ final firebaseAuthProvider = Provider<FirebaseAuth>((ref) => FirebaseAuth.instan
 final firestoreProvider = Provider<FirebaseFirestore>((ref) => FirebaseFirestore.instance);
 final supabaseClientProvider = Provider<SupabaseClient>((ref) => Supabase.instance.client);
 
+final supabaseFunctionsUrlProvider = Provider<String>((ref) {
+  const url = String.fromEnvironment('SUPABASE_FUNCTIONS_URL');
+  return url;
+});
+
 final firebaseServiceProvider = Provider<FirebaseService>((ref) {
   return FirebaseService(
     auth: ref.watch(firebaseAuthProvider),
@@ -35,7 +40,6 @@ final supabaseServiceProvider = Provider<SupabaseService>((ref) {
 });
 
 final cloudinaryServiceProvider = Provider<CloudinaryService>((ref) {
-  // Replace with your Cloudinary cloud name at build time (--dart-define).
   const cloudName = String.fromEnvironment('CLOUDINARY_CLOUD_NAME', defaultValue: '');
   return const CloudinaryService(cloudName);
 });
@@ -51,7 +55,7 @@ final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
 final conversationRepositoryProvider = Provider<ConversationRepository>((ref) {
   return ConversationRepositoryImpl(
     ref.watch(firestoreProvider),
-    ref.watch(firebaseAuthProvider).currentUser?.uid ?? '',
+    ref.watch(supabaseFunctionsUrlProvider),
   );
 });
 

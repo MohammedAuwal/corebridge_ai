@@ -1,6 +1,6 @@
 import '../entities/message_entity.dart';
 import '../repositories/conversation_repository.dart';
-import '../../data/repositories_impl/user_settings_repository.dart';
+import '../repositories/user_settings_repository.dart';
 
 class SendMessageUseCase {
   final ConversationRepository _conversationRepository;

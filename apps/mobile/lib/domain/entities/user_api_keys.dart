@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class UserApiKeys {
   final String? claude;
   final String? openai;
@@ -40,33 +38,5 @@ class UserApiKeys {
       default:
         return null;
     }
-  }
-
-  UserApiKeys copyWith({String? claude, String? openai, String? gemini, String? qwen}) {
-    return UserApiKeys(
-      claude: claude ?? this.claude,
-      openai: openai ?? this.openai,
-      gemini: gemini ?? this.gemini,
-      qwen: qwen ?? this.qwen,
-    );
-  }
-}
-
-class UserSettingsRepository {
-  final FirebaseFirestore _firestore;
-
-  UserSettingsRepository(this._firestore);
-
-  Future<UserApiKeys> getApiKeys(String uid) async {
-    final doc = await _firestore.collection('users').doc(uid).get();
-    if (!doc.exists) return const UserApiKeys();
-    return UserApiKeys.fromMap(doc.data()?['apiKeys'] as Map<String, dynamic>?);
-  }
-
-  Future<void> saveApiKeys(String uid, UserApiKeys apiKeys) async {
-    await _firestore.collection('users').doc(uid).set({
-      'apiKeys': apiKeys.toMap(),
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
-    }, SetOptions(merge: true));
   }
 }

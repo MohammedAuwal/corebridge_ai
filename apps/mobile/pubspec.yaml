@@ -30,7 +30,6 @@ dependencies:
   hive_flutter: ^1.1.0
 
   # UI
-  lucide_icons: any
   flutter_animate: ^4.5.0
   flutter_markdown: ^0.7.3
   fl_chart: ^0.68.0
