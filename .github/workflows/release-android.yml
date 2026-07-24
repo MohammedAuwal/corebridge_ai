@@ -12,7 +12,7 @@ on:
         required: true
         default: "1"
       app_icon_url:
-        description: "Direct URL to a PNG app icon (min 512x512). Leave blank to reuse the repo variable APP_ICON_URL."
+        description: "Direct URL to a PNG app icon"
         required: false
         default: "https://drive.google.com/uc?export=download&id=1hSe-4Pc2j1MrqBH4ixgpIn0nxfq6XjOZ"
   push:
@@ -54,17 +54,24 @@ jobs:
             echo "url=https://drive.google.com/uc?export=download&id=1hSe-4Pc2j1MrqBH4ixgpIn0nxfq6XjOZ" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Download and apply app icon
+      - name: Force Download from Google Drive
         run: |
           mkdir -p assets/icon
           ICON_URL="${{ steps.icon_url.outputs.url }}"
-          if [ -z "$ICON_URL" ]; then
-            echo "No icon URL provided (workflow input or APP_ICON_URL repo variable). Using existing placeholder."
-          else
-            echo "Downloading icon from $ICON_URL"
-            curl -L --fail -o assets/icon/icon.png "$ICON_URL"
-            file assets/icon/icon.png
+          
+          echo "Initiating forced download from Google Drive..."
+          # Using wget with specific flags to bypass Google Drive SSL redirects
+          wget --no-check-certificate -qO assets/icon/icon.png "$ICON_URL"
+          
+          # Verify the file was actually downloaded and is not an HTML error page
+          if [ ! -s assets/icon/icon.png ] || grep -qi "<html" assets/icon/icon.png; then
+            echo "❌ ERROR: Downloaded file is invalid or empty. Check Google Drive sharing permissions."
+            cat assets/icon/icon.png
+            exit 1
           fi
+          
+          echo "✅ Icon downloaded successfully:"
+          file assets/icon/icon.png
 
       - name: Resolve version
         id: version
@@ -85,7 +92,7 @@ jobs:
       - name: Get Flutter packages
         run: flutter pub get
 
-      - name: Generate launcher icons from downloaded image
+      - name: Generate launcher icons
         run: dart run flutter_launcher_icons
 
       - name: Restore Android keystore
@@ -144,7 +151,7 @@ jobs:
           cp build/app/outputs/bundle/release/app-release.aab \
              release_output/corebridge-ai-${{ steps.version.outputs.version_name }}.aab
 
-      - name: Upload build artifacts (workflow run)
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: corebridge-android-${{ steps.version.outputs.version_name }}
