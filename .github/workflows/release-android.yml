@@ -14,7 +14,7 @@ on:
       app_icon_url:
         description: "Direct URL to a PNG app icon (min 512x512). Leave blank to reuse the repo variable APP_ICON_URL."
         required: false
-        default: ""
+        default: "https://drive.google.com/uc?export=download&id=1hSe-4Pc2j1MrqBH4ixgpIn0nxfq6XjOZ"
   push:
     branches: [ "master", "main" ]
     paths:
@@ -51,7 +51,7 @@ jobs:
           if [ -n "${{ github.event.inputs.app_icon_url }}" ]; then
             echo "url=${{ github.event.inputs.app_icon_url }}" >> "$GITHUB_OUTPUT"
           else
-            echo "url=${{ vars.APP_ICON_URL }}" >> "$GITHUB_OUTPUT"
+            echo "url=https://drive.google.com/uc?export=download&id=1hSe-4Pc2j1MrqBH4ixgpIn0nxfq6XjOZ" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Download and apply app icon
