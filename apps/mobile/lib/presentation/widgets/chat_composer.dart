@@ -145,7 +145,7 @@ class _ChatComposerState extends State<ChatComposer> {
                       SelectableText(
                         artifact.code,
                         style: const TextStyle(
-                          color: Colors.white90,
+                          color: Colors.white70, // <-- BUG FIXED HERE
                           fontFamily: 'monospace',
                           fontSize: 13,
                         ),
