@@ -12,6 +12,7 @@ import '../screens/knowledge_base_screen.dart';
 import '../screens/projects_screen.dart';
 import '../screens/prompt_library_screen.dart';
 import '../screens/settings_screen.dart';
+import '../screens/usage_stats_screen.dart';
 import '../shell/app_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -41,6 +42,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/prompt-library', builder: (context, state) => const PromptLibraryScreen()),
           GoRoute(path: '/history', builder: (context, state) => const HistoryScreen()),
           GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+          GoRoute(path: '/usage-stats', builder: (context, state) => const UsageStatsScreen()),
         ],
       ),
     ],
