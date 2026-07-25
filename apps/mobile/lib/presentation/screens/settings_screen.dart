@@ -48,8 +48,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     setState(() => _isSaving = true);
 
-    // Keys are trimmed so accidental leading/trailing whitespace from
-    // copy-paste never causes a "key exists but doesn't match" bug.
     final repo = ref.read(userSettingsRepositoryProvider);
     await repo.saveApiKeys(
       uid,
@@ -64,7 +62,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) {
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('API keys saved.')),
+        const SnackBar(content: Text('API keys saved successfully!')),
       );
     }
   }
