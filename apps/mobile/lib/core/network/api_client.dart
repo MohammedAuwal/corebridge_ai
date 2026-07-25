@@ -32,12 +32,18 @@ class AiRouterClient {
 
     final request = await _httpClient.postUrl(uri);
     request.headers.set('Authorization', 'Bearer $idToken');
-    request.headers.set('Content-Type', 'application/json');
-    request.write(jsonEncode({
+    
+    // Explicit UTF-8 encoding so emojis/special characters don't crash the request
+    request.headers.contentType = ContentType('application', 'json', charset: 'utf-8');
+    
+    // THE FIX: We actually put the apiKey in the payload now!
+    final bodyBytes = utf8.encode(jsonEncode({
       'provider': provider,
       'model': model,
       'messages': messages,
+      'apiKey': apiKey,
     }));
+    request.add(bodyBytes);
 
     final response = await request.close();
 
