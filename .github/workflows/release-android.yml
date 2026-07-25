@@ -16,9 +16,10 @@ on:
         required: false
         default: ""
   push:
-    branches: ["main"]
+    branches: ["main", "master"]
     paths:
       - "apps/mobile/**"
+      - ".github/workflows/**"
     tags:
       - "v*.*.*"
 
@@ -156,7 +157,7 @@ jobs:
             echo "::error::ANDROID_KEYSTORE_BASE64 secret is missing."
             exit 1
           fi
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/corebridge-release.jks
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d -i > android/app/corebridge-release.jks
           echo "Keystore size: $(wc -c < android/app/corebridge-release.jks) bytes"
 
       - name: Verify keystore
@@ -211,7 +212,7 @@ jobs:
             echo "::error::GOOGLE_SERVICES_JSON_BASE64 secret is missing."
             exit 1
           fi
-          echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > android/app/google-services.json
+          echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d -i > android/app/google-services.json
 
       - name: Set pubspec version
         run: |
