@@ -18,6 +18,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final List<MessageEntity> _messages = [];
+  final Set<String> _errorMessageIds = {};
   bool _isSending = false;
 
   @override
@@ -38,10 +39,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final selectedModel = ref.read(selectedModelProvider);
 
+    final userMessageId = DateTime.now().millisecondsSinceEpoch.toString();
+
     setState(() {
       _isSending = true;
       _messages.add(MessageEntity(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: userMessageId,
         conversationId: 'local-draft',
         role: MessageRole.user,
         content: text,
@@ -61,6 +64,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ));
     });
 
+    final cleanHistory = _messages
+        .where((m) => m.id != placeholderId && !_errorMessageIds.contains(m.id))
+        .toList();
+
     final sendMessageUseCase = ref.read(sendMessageUseCaseProvider);
 
     try {
@@ -68,7 +75,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         uid: uid,
         conversationId: 'local-draft',
         userMessage: text,
-        history: _messages.where((m) => m.id != placeholderId && m.id != _messages.last.id).toList(),
+        history: cleanHistory.where((m) => m.id != userMessageId).toList(),
         provider: selectedModel.provider,
         model: selectedModel.model,
       )) {
@@ -80,18 +87,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
       }
     } catch (e) {
-      // This is the fix: errors are now caught and shown, instead of
-      // vanishing into a permanently-empty "..." bubble.
       final index = _messages.indexWhere((m) => m.id == placeholderId);
       final errorText = _friendlyError(e);
       if (index != -1) {
         setState(() {
-          _messages[index] = _messages[index].copyWith(content: '⚠️ $errorText', isStreaming: false);
+          _messages[index] = _messages[index].copyWith(content: 'Error: $errorText', isStreaming: false);
+          _errorMessageIds.add(placeholderId);
         });
       }
     } finally {
       final index = _messages.indexWhere((m) => m.id == placeholderId);
-      if (index != -1) {
+      if (index != -1 && !_errorMessageIds.contains(placeholderId)) {
         setState(() {
           _messages[index] = _messages[index].copyWith(isStreaming: false);
         });
@@ -102,13 +108,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   String _friendlyError(Object e) {
     final msg = e.toString();
-    if (msg.contains('No API key set')) {
+    if (msg.contains('No API key set') || msg.contains('No API key provided')) {
       return 'No API key set for this provider. Open the menu → API Providers to add one.';
     }
-    if (msg.contains('Unauthorized')) {
-      return 'Session expired — please sign out and sign back in.';
-    }
-    return msg.replaceFirst('Exception: ', '').replaceFirst('StateError: ', '');
+    // The real reason from the server is shown as-is now, instead of
+    // being hidden behind a generic "session expired" message, so
+    // failures are diagnosable directly from the phone.
+    return msg
+        .replaceFirst('Exception: ', '')
+        .replaceFirst('StateError: ', '')
+        .replaceFirst('HttpException: ', '');
   }
 
   @override
@@ -129,7 +138,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         itemBuilder: (context, index) {
                           final message = _messages[index];
                           final isUser = message.role == MessageRole.user;
-                          final isError = message.content.startsWith('⚠️');
+                          final isError = _errorMessageIds.contains(message.id);
 
                           return Align(
                             alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
