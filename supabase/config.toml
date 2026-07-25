@@ -2,3 +2,9 @@ project_id = "corebridge-ai"
 
 [functions.ai-router]
 verify_jwt = false
+
+[functions.export-artifact]
+verify_jwt = false
+
+[functions.file-process]
+verify_jwt = false

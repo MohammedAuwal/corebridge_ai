@@ -18,5 +18,4 @@ final availableModels = <AiModelOption>[
 
 final selectedModelProvider = StateProvider<AiModelOption>((ref) => availableModels.first);
 
-/// Carries a draft message typed on Home into the Chat screen.
 final draftMessageProvider = StateProvider<String>((ref) => '');

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/di/providers.dart';
+import '../../core/theme/app_theme.dart';
 import '../../domain/entities/user_api_keys.dart';
+import '../widgets/geo_mesh_background.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -46,14 +48,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     setState(() => _isSaving = true);
 
+    // Keys are trimmed so accidental leading/trailing whitespace from
+    // copy-paste never causes a "key exists but doesn't match" bug.
     final repo = ref.read(userSettingsRepositoryProvider);
     await repo.saveApiKeys(
       uid,
       UserApiKeys(
-        claude: _claudeController.text.trim(),
-        openai: _openaiController.text.trim(),
-        gemini: _geminiController.text.trim(),
-        qwen: _qwenController.text.trim(),
+        claude: _claudeController.text.trim().isEmpty ? null : _claudeController.text.trim(),
+        openai: _openaiController.text.trim().isEmpty ? null : _openaiController.text.trim(),
+        gemini: _geminiController.text.trim().isEmpty ? null : _geminiController.text.trim(),
+        qwen: _qwenController.text.trim().isEmpty ? null : _qwenController.text.trim(),
       ),
     );
 
@@ -78,77 +82,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text('AI Providers', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 4),
-                Text(
-                  'Add your own API keys. They\'re stored privately on your account '
-                  'and sent only to that provider when you chat.',
-                  style: Theme.of(context).textTheme.bodyMedium,
+      body: Stack(
+        children: [
+          const Positioned.fill(child: GeoMeshBackground()),
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text('AI Providers', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Add your own API keys. They\'re stored privately on your account '
+                      'and sent only to that provider when you chat.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _claudeController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Anthropic (Claude)',
+                        hintText: 'sk-ant-...',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _openaiController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'OpenAI',
+                        hintText: 'sk-...',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _geminiController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Google Gemini',
+                        hintText: 'AIza...',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _qwenController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Qwen (Alibaba)',
+                        hintText: 'sk-...',
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: _isSaving ? null : _saveKeys,
+                      child: _isSaving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text('Save keys'),
+                    ),
+                    const Divider(height: 40),
+                    ListTile(
+                      leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+                      title: const Text('Sign out'),
+                      onTap: () => ref.read(firebaseServiceProvider).signOut(),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _claudeController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Anthropic (Claude)',
-                    hintText: 'sk-ant-...',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _openaiController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'OpenAI',
-                    hintText: 'sk-...',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _geminiController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Google Gemini',
-                    hintText: 'AIza...',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _qwenController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Qwen (Alibaba)',
-                    hintText: 'sk-...',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _isSaving ? null : _saveKeys,
-                  child: _isSaving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('Save keys'),
-                ),
-                const Divider(height: 40),
-                ListTile(
-                  title: const Text('Sign out'),
-                  leading: const Icon(Icons.logout),
-                  onTap: () => ref.read(firebaseServiceProvider).signOut(),
-                ),
-              ],
-            ),
+        ],
+      ),
     );
   }
 }
