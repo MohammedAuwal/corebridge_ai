@@ -33,9 +33,7 @@ class CoreBridgeApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'CoreBridge AI',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system,
+      theme: AppTheme.dark(),
       routerConfig: router,
     );
   }
