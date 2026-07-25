@@ -2,13 +2,9 @@ import {
   addDoc,
   collection,
   doc,
-  getDoc,
   getDocs,
   orderBy,
   query,
-  serverTimestamp,
-  setDoc,
-  Timestamp,
   updateDoc,
 } from 'firebase/firestore';
 import { firestore } from '../remote/firebase/firebase-config';
