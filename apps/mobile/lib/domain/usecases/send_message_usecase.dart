@@ -20,7 +20,9 @@ class SendMessageUseCase {
     final apiKey = apiKeys.forProvider(provider);
 
     if (apiKey == null || apiKey.trim().isEmpty) {
-      throw StateError('No API key set for $provider. Add one in Settings → AI Providers.');
+      // DEBUG: This will show us EXACTLY what the app pulled from Firestore
+      final readKeys = apiKeys.toMap().toString();
+      throw StateError('No API key set for $provider. \n\nDEBUG - The app found this in the database: $readKeys');
     }
 
     await _conversationRepository.appendMessage(
