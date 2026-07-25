@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/scaffold_key_provider.dart';
 import '../../core/providers/selected_model_provider.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -16,11 +17,12 @@ class ModelSelectorBar extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
         child: Row(
           children: [
-            Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.menu_rounded),
-                onPressed: () => Scaffold.of(context).openDrawer(),
-              ),
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () {
+                final scaffoldKey = ref.read(scaffoldKeyProvider);
+                scaffoldKey.currentState?.openDrawer();
+              },
             ),
             const Spacer(),
             PopupMenuButton<AiModelOption>(

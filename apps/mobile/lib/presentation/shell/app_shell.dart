@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/di/providers.dart';
+import '../../core/providers/scaffold_key_provider.dart';
 import '../../core/theme/app_theme.dart';
 
 class AppShell extends ConsumerWidget {
@@ -158,6 +159,7 @@ class AppShell extends ConsumerWidget {
     }
 
     return Scaffold(
+      key: ref.watch(scaffoldKeyProvider),
       drawer: Drawer(
         width: 280,
         backgroundColor: AppColors.surface,

@@ -2,9 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// Thin client around the `ai-router` Supabase Edge Function.
-/// BYOK model: the caller must supply the user's own provider API key —
-/// it is sent per request and never stored server-side.
 class AiRouterClient {
   final String supabaseFunctionsBaseUrl;
   final HttpClient _httpClient = HttpClient();
@@ -17,8 +14,12 @@ class AiRouterClient {
     required List<Map<String, String>> messages,
     required String apiKey,
   }) async* {
-    if (apiKey.trim().isEmpty) {
-      throw StateError('No API key set for $provider. Add one in Settings.');
+    if (supabaseFunctionsBaseUrl.trim().isEmpty) {
+      throw StateError(
+        'App was built without SUPABASE_FUNCTIONS_URL. This build is missing '
+        'a required --dart-define — rebuild with the correct value '
+        '(see run_dev.sh locally, or the SUPABASE_FUNCTIONS_URL secret in CI).',
+      );
     }
 
     final firebaseUser = FirebaseAuth.instance.currentUser;
@@ -36,7 +37,6 @@ class AiRouterClient {
       'provider': provider,
       'model': model,
       'messages': messages,
-      'apiKey': apiKey,
     }));
 
     final response = await request.close();
