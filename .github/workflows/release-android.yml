@@ -256,11 +256,19 @@ jobs:
           cp build/app/outputs/bundle/release/app-release.aab \
              release_output/corebridge-ai-${{ steps.version.outputs.version_name }}.aab
 
-      - name: Upload build artifacts (workflow run)
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: corebridge-android-${{ steps.version.outputs.version_name }}
-          path: apps/mobile/release_output/*
+          name: app-release-apk
+          path: apps/mobile/release_output/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: apps/mobile/release_output/*.aab
           if-no-files-found: error
           retention-days: 30
 
