@@ -167,6 +167,29 @@ jobs:
           keytool -list -keystore android/app/corebridge-release.jks \
             -alias "$KEY_ALIAS" -storepass "$STORE_PASSWORD" | grep -E "Alias|fingerprint" || true
 
+      - name: Debug secrets presence (no values printed)
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          [ -n "${STORE_PASSWORD:-}" ] && echo "ANDROID_KEYSTORE_PASSWORD: set" || echo "::error::ANDROID_KEYSTORE_PASSWORD is EMPTY"
+          [ -n "${KEY_ALIAS:-}" ] && echo "ANDROID_KEY_ALIAS: set (value: ${KEY_ALIAS})" || echo "::error::ANDROID_KEY_ALIAS is EMPTY"
+          [ -n "${KEY_PASSWORD:-}" ] && echo "ANDROID_KEY_PASSWORD: set" || echo "::error::ANDROID_KEY_PASSWORD is EMPTY"
+
+      - name: Confirm keystore contains the expected alias
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "Looking for alias '${KEY_ALIAS}' in the keystore..."
+          if ! keytool -list -keystore android/app/corebridge-release.jks -storepass "${STORE_PASSWORD}" | grep -qi "^${KEY_ALIAS},"; then
+            echo "::error::Alias '${KEY_ALIAS}' was NOT found in the keystore. Aliases present:"
+            keytool -list -keystore android/app/corebridge-release.jks -storepass "${STORE_PASSWORD}" | grep "PrivateKeyEntry\|,"
+            exit 1
+          fi
+          echo "✅ Alias '${KEY_ALIAS}' found."
+
       - name: Write key.properties
         env:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
