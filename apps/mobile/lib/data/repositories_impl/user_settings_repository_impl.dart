@@ -10,8 +10,17 @@ class UserSettingsRepositoryImpl implements UserSettingsRepository {
   @override
   Future<UserApiKeys> getApiKeys(String uid) async {
     final doc = await _firestore.collection('users').doc(uid).get();
-    if (!doc.exists) return const UserApiKeys();
-    return UserApiKeys.fromMap(doc.data()?['apiKeys'] as Map<String, dynamic>?);
+    if (!doc.exists || doc.data() == null) return const UserApiKeys();
+
+    final data = doc.data()!;
+    if (!data.containsKey('apiKeys') || data['apiKeys'] == null) {
+      return const UserApiKeys();
+    }
+
+    // Bulletproof cast: forces Firestore's internal map type into a standard Dart Map
+    // so it never silently drops your keys during the read process.
+    final apiKeysMap = Map<String, dynamic>.from(data['apiKeys'] as Map);
+    return UserApiKeys.fromMap(apiKeysMap);
   }
 
   @override
