@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../core/di/providers.dart';
 import '../../core/providers/selected_model_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -8,6 +7,7 @@ import '../../domain/entities/message_entity.dart';
 import '../widgets/geo_mesh_background.dart';
 import '../widgets/chat_composer.dart';
 import '../widgets/model_selector_bar.dart';
+import '../widgets/chat_message_bubble.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -38,7 +38,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (uid == null) return;
 
     final selectedModel = ref.read(selectedModelProvider);
-
     final userMessageId = DateTime.now().millisecondsSinceEpoch.toString();
 
     setState(() {
@@ -106,14 +105,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  void _rewriteMessage(int index) {
+    if (_isSending) return;
+    
+    // Find the last user message before this AI response
+    String? lastUserText;
+    for (int i = index - 1; i >= 0; i--) {
+      if (_messages[i].role == MessageRole.user) {
+        lastUserText = _messages[i].content;
+        break;
+      }
+    }
+
+    if (lastUserText != null) {
+      // Remove the targeted AI message (and any errors) so they don't pollute history
+      setState(() {
+        _messages.removeAt(index);
+      });
+      // Resend the last user message
+      _send(lastUserText);
+    }
+  }
+
   String _friendlyError(Object e) {
     final msg = e.toString();
     if (msg.contains('No API key set') || msg.contains('No API key provided')) {
       return 'No API key set for this provider. Open the menu → API Providers to add one.';
     }
-    // The real reason from the server is shown as-is now, instead of
-    // being hidden behind a generic "session expired" message, so
-    // failures are diagnosable directly from the phone.
     return msg
         .replaceFirst('Exception: ', '')
         .replaceFirst('StateError: ', '')
@@ -133,42 +151,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: _messages.isEmpty
                     ? const _EmptyChatState()
                     : ListView.builder(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                         itemCount: _messages.length,
                         itemBuilder: (context, index) {
                           final message = _messages[index];
                           final isUser = message.role == MessageRole.user;
-                          final isError = _errorMessageIds.contains(message.id);
+                          
+                          // If it's a UI error bubble, we still show the old red block
+                          if (_errorMessageIds.contains(message.id)) {
+                             return _buildErrorBubble(context, message.content);
+                          }
 
-                          return Align(
-                            alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(vertical: 6),
-                              padding: const EdgeInsets.all(14),
-                              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-                              decoration: BoxDecoration(
-                                gradient: isUser ? AppColors.brandGradient : null,
-                                color: isUser ? null : (isError ? Colors.red.withValues(alpha: 0.12) : AppColors.surface),
-                                borderRadius: BorderRadius.circular(AppRadii.lg),
-                                border: isUser
-                                    ? null
-                                    : Border.all(color: isError ? Colors.redAccent.withValues(alpha: 0.4) : AppColors.border),
-                              ),
-                              child: message.content.isEmpty && message.isStreaming
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentBlue),
-                                    )
-                                  : MarkdownBody(
-                                      data: message.content,
-                                      styleSheet: MarkdownStyleSheet(
-                                        p: TextStyle(
-                                          color: isUser ? Colors.white : (isError ? Colors.redAccent.shade100 : AppColors.textPrimary),
-                                        ),
-                                      ),
-                                    ),
-                            ),
+                          // Otherwise, use our shiny new premium bubble!
+                          return ChatMessageBubble(
+                            message: message,
+                            onRewrite: isUser ? null : () => _rewriteMessage(index),
                           );
                         },
                       ),
@@ -182,6 +179,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildErrorBubble(BuildContext context, String text) {
+     return Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+          padding: const EdgeInsets.all(14),
+          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+          decoration: BoxDecoration(
+            color: Colors.red.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(AppRadii.lg),
+            border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+          ),
+          child: Text(text, style: TextStyle(color: Colors.redAccent.shade100)),
+        ),
+     );
   }
 }
 
