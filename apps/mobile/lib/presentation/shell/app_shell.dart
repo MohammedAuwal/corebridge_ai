@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/di/providers.dart';
+import '../../core/providers/conversation_provider.dart';
 import '../../core/providers/scaffold_key_provider.dart';
+import '../../core/providers/conversation_provider.dart';
 import '../../core/providers/scaffold_key_provider.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -72,7 +74,7 @@ class AppShell extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
-                  ..._mainItems.map((item) => _drawerTile(context, item, currentPath, inDrawer)),
+                  ..._mainItems.map((item) => _drawerTile(context, ref, item, currentPath, inDrawer)),
                   const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(height: 1)),
                   ..._settingsItems.map((item) => _drawerTile(context, item, currentPath, inDrawer)),
                 ],
@@ -110,7 +112,7 @@ class AppShell extends ConsumerWidget {
     );
   }
 
-  Widget _drawerTile(BuildContext context, _NavItem item, String currentPath, bool inDrawer) {
+  Widget _drawerTile(BuildContext context, WidgetRef ref, _NavItem item, String currentPath, bool inDrawer) {
     final isSelected = item.path == currentPath;
     return ListTile(
       leading: Icon(item.icon, color: isSelected ? AppColors.accentBlue : AppColors.textSecondary, size: 20),
@@ -120,6 +122,9 @@ class AppShell extends ConsumerWidget {
       dense: true,
       onTap: () {
         if (inDrawer) Navigator.of(context).pop();
+        if (item.path == '/chat') {
+          ref.read(activeConversationIdProvider.notifier).state = null;
+        }
         context.go(item.path);
       },
     );

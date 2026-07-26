@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/di/providers.dart';
+import '../../core/providers/conversation_provider.dart';
 import '../../core/providers/selected_model_provider.dart';
 import '../widgets/geo_mesh_background.dart';
 import '../widgets/chat_composer.dart';
@@ -44,6 +45,7 @@ class HomeScreen extends ConsumerWidget {
               ChatComposer(
                 isSending: false,
                 onSend: (text) {
+                  ref.read(activeConversationIdProvider.notifier).state = null;
                   ref.read(draftMessageProvider.notifier).state = text;
                   context.go('/chat');
                 },

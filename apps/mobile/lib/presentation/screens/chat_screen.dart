@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/di/providers.dart';
+import '../../core/providers/conversation_provider.dart';
 import '../../core/providers/selected_model_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/entities/message_entity.dart';
@@ -20,15 +21,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final List<MessageEntity> _messages = [];
   final Set<String> _errorMessageIds = {};
   bool _isSending = false;
+  bool _isLoadingHistory = false;
+  String? _conversationId;
 
   @override
   void initState() {
     super.initState();
+    _conversationId = ref.read(activeConversationIdProvider);
+
+    if (_conversationId != null) {
+      _loadExistingConversation(_conversationId!);
+    }
+
     final draft = ref.read(draftMessageProvider);
     if (draft.trim().isNotEmpty) {
       ref.read(draftMessageProvider.notifier).state = '';
       WidgetsBinding.instance.addPostFrameCallback((_) => _send(draft));
     }
+  }
+
+  Future<void> _loadExistingConversation(String conversationId) async {
+    setState(() => _isLoadingHistory = true);
+    try {
+      final messages = await ref
+          .read(conversationRepositoryProvider)
+          .watchMessages(conversationId)
+          .first;
+      if (mounted) {
+        setState(() {
+          _messages.clear();
+          _messages.addAll(messages);
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingHistory = false);
+    }
+  }
+
+  /// Creates a title from the first user message: short, human-readable,
+  /// truncated so it fits nicely in the History and drawer lists.
+  String _titleFrom(String firstMessage) {
+    final oneLine = firstMessage.replaceAll('\n', ' ').trim();
+    if (oneLine.length <= 48) return oneLine;
+    return '${oneLine.substring(0, 48).trim()}…';
   }
 
   Future<void> _send(String text) async {
@@ -39,13 +74,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final selectedModel = ref.read(selectedModelProvider);
 
+    // Lazily create the real Firestore conversation on the very first
+    // message — this is what was missing before, causing History to
+    // always be empty.
+    if (_conversationId == null) {
+      final result = await ref.read(conversationRepositoryProvider).createConversation(
+            ownerId: uid,
+            title: _titleFrom(text),
+          );
+      result.when(
+        success: (conversation) {
+          _conversationId = conversation.id;
+          ref.read(activeConversationIdProvider.notifier).state = conversation.id;
+        },
+        error: (failure) {
+          // Fall back to a local-only id so the chat still works even
+          // if Firestore write failed (e.g. offline) — it just won't
+          // show in History until connectivity returns and a retry
+          // succeeds on a future message.
+          _conversationId = 'local-${DateTime.now().millisecondsSinceEpoch}';
+        },
+      );
+    }
+
     final userMessageId = DateTime.now().millisecondsSinceEpoch.toString();
 
     setState(() {
       _isSending = true;
       _messages.add(MessageEntity(
         id: userMessageId,
-        conversationId: 'local-draft',
+        conversationId: _conversationId!,
         role: MessageRole.user,
         content: text,
         createdAt: DateTime.now(),
@@ -56,7 +114,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     setState(() {
       _messages.add(MessageEntity(
         id: placeholderId,
-        conversationId: 'local-draft',
+        conversationId: _conversationId!,
         role: MessageRole.assistant,
         content: '',
         isStreaming: true,
@@ -64,10 +122,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ));
     });
 
-    // Only real prior turns go to the API — error bubbles are UI-only
-    // and must never be replayed back into the model's context.
     final cleanHistory = _messages
-        .where((m) => m.id != placeholderId && !_errorMessageIds.contains(m.id))
+        .where((m) => m.id != placeholderId && m.id != userMessageId && !_errorMessageIds.contains(m.id))
         .toList();
 
     final sendMessageUseCase = ref.read(sendMessageUseCaseProvider);
@@ -75,9 +131,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     try {
       await for (final partial in sendMessageUseCase(
         uid: uid,
-        conversationId: 'local-draft',
+        conversationId: _conversationId!,
         userMessage: text,
-        history: cleanHistory.where((m) => m.id != userMessageId).toList(),
+        history: cleanHistory,
         provider: selectedModel.provider,
         model: selectedModel.model,
       )) {
@@ -109,8 +165,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _rewrite(MessageEntity assistantMessage) {
-    // Find the user message immediately before this assistant reply and
-    // resend it, replacing the old response.
     final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
     if (index <= 0) return;
 
@@ -145,24 +199,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             children: [
               const ModelSelectorBar(),
               Expanded(
-                child: _messages.isEmpty
-                    ? const _EmptyChatState()
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final message = _messages[index];
-                          final isError = _errorMessageIds.contains(message.id);
+                child: _isLoadingHistory
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue))
+                    : _messages.isEmpty
+                        ? const _EmptyChatState()
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _messages.length,
+                            itemBuilder: (context, index) {
+                              final message = _messages[index];
+                              final isError = _errorMessageIds.contains(message.id);
 
-                          return ChatMessageBubble(
-                            message: message,
-                            isError: isError,
-                            onRewrite: (!isError && message.role == MessageRole.assistant && !message.isStreaming)
-                                ? () => _rewrite(message)
-                                : null,
-                          );
-                        },
-                      ),
+                              return ChatMessageBubble(
+                                message: message,
+                                isError: isError,
+                                onRewrite: (!isError && message.role == MessageRole.assistant && !message.isStreaming)
+                                    ? () => _rewrite(message)
+                                    : null,
+                              );
+                            },
+                          ),
               ),
               ChatComposer(
                 onSend: _send,
