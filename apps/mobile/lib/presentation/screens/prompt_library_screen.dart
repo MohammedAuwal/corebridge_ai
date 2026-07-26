@@ -118,14 +118,14 @@ class PromptLibraryScreen extends ConsumerWidget {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.grid_view_rounded, color: AppColors.accentViolet, size: 18),
-                    onTap: () {},
+                    onPressed: () {},
                     constraints: const BoxConstraints(minWidth: 40, minHeight: 48),
                     padding: EdgeInsets.zero,
                   ),
                   Container(width: 1, height: 24, color: AppColors.border),
                   IconButton(
                     icon: const Icon(Icons.format_list_bulleted_rounded, color: AppColors.textMuted, size: 18),
-                    onTap: () {},
+                    onPressed: () {},
                     constraints: const BoxConstraints(minWidth: 40, minHeight: 48),
                     padding: EdgeInsets.zero,
                   ),
@@ -521,8 +521,8 @@ const _mockPrompts = [
     'Study Guide Creator',
     'Generate comprehensive study guides, summaries and practice questions.',
     'Education',
-    Icons.school_rounded,
     '6.3K',
+    Icons.school_rounded,
     Colors.tealAccent,
     false,
   ),

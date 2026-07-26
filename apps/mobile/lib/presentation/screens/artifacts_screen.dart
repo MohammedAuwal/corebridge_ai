@@ -159,7 +159,7 @@ class ArtifactsScreen extends ConsumerWidget {
               ),
               child: IconButton(
                 icon: const Icon(Icons.tune_rounded, color: AppColors.textSecondary, size: 20),
-                onTap: () {},
+                onPressed: () {},
               ),
             )
           ],
@@ -273,14 +273,14 @@ class ArtifactsScreen extends ConsumerWidget {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.grid_view_rounded, color: AppColors.accentBlue, size: 18),
-                    onTap: () {},
+                    onPressed: () {},
                     constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                     padding: EdgeInsets.zero,
                   ),
                   Container(width: 1, height: 20, color: AppColors.border),
                   IconButton(
                     icon: const Icon(Icons.format_list_bulleted_rounded, color: AppColors.textMuted, size: 18),
-                    onTap: () {},
+                    onPressed: () {},
                     constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                     padding: EdgeInsets.zero,
                   ),

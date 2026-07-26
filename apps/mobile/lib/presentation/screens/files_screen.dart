@@ -185,7 +185,7 @@ class FilesScreen extends ConsumerWidget {
               ),
               child: IconButton(
                 icon: const Icon(Icons.filter_alt_outlined, color: AppColors.textSecondary, size: 20),
-                onTap: () {},
+                onPressed: () {},
               ),
             ),
             const SizedBox(width: 12),
@@ -195,14 +195,14 @@ class FilesScreen extends ConsumerWidget {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.grid_view_rounded, color: AppColors.accentBlue, size: 18),
-                    onTap: () {},
+                    onPressed: () {},
                     constraints: const BoxConstraints(minWidth: 40, minHeight: 48),
                     padding: EdgeInsets.zero,
                   ),
                   Container(width: 1, height: 24, color: AppColors.border),
                   IconButton(
                     icon: const Icon(Icons.format_list_bulleted_rounded, color: AppColors.textMuted, size: 18),
-                    onTap: () {},
+                    onPressed: () {},
                     constraints: const BoxConstraints(minWidth: 40, minHeight: 48),
                     padding: EdgeInsets.zero,
                   ),
@@ -280,7 +280,7 @@ class FilesScreen extends ConsumerWidget {
             const Text('Folders', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             IconButton(
               icon: const Icon(Icons.add_rounded, color: AppColors.textMuted, size: 20),
-              onTap: () {},
+              onPressed: () {},
             )
           ],
         ),
@@ -487,12 +487,14 @@ class FilesScreen extends ConsumerWidget {
             ),
             Expanded(
               flex: 2, 
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: AppColors.canvas, borderRadius: BorderRadius.circular(4), border: Border.all(color: AppColors.border)),
-                child: Text(ext, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: AppColors.canvas, borderRadius: BorderRadius.circular(4), border: Border.all(color: AppColors.border)),
+                  child: Text(ext, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
               ),
-              alignment: Alignment.centerLeft, // Hack to make container wrap text
             ),
             Expanded(
               flex: 2, 
