@@ -4,8 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/di/providers.dart';
 import '../../core/providers/conversation_provider.dart';
 import '../../core/providers/scaffold_key_provider.dart';
-import '../../core/providers/conversation_provider.dart';
-import '../../core/providers/scaffold_key_provider.dart';
 import '../../core/theme/app_theme.dart';
 
 class AppShell extends ConsumerWidget {
@@ -21,14 +19,16 @@ class AppShell extends ConsumerWidget {
     _NavItem('/files', Icons.folder_copy_outlined, 'Files'),
     _NavItem('/knowledge-base', Icons.menu_book_outlined, 'Knowledge Base'),
     _NavItem('/prompt-library', Icons.library_books_outlined, 'Prompt Library'),
-    _NavItem('/history', Icons.forum_outlined, 'Conversations'),
     _NavItem('/history', Icons.history_rounded, 'History'),
   ];
 
+  // These are "detail" screens, not peer tabs — navigated to with
+  // push() so GoRouter gives them a real back-stack entry, which the
+  // system back button (and an AppBar back arrow) can pop naturally.
   static const _settingsItems = [
-    _NavItem('/settings', Icons.settings_outlined, 'Settings'),
-    _NavItem('/settings', Icons.power_settings_new_rounded, 'API Providers'),
-    _NavItem('/usage-stats', Icons.bar_chart_rounded, 'Usage & Stats'),
+    _NavItem('/settings', Icons.settings_outlined, 'Settings', push: true),
+    _NavItem('/api-providers', Icons.power_settings_new_rounded, 'API Providers', push: true),
+    _NavItem('/usage-stats', Icons.bar_chart_rounded, 'Usage & Stats', push: true),
   ];
 
   Widget _buildDrawerContent(BuildContext context, WidgetRef ref, {required bool inDrawer}) {
@@ -125,7 +125,11 @@ class AppShell extends ConsumerWidget {
         if (item.path == '/chat') {
           ref.read(activeConversationIdProvider.notifier).state = null;
         }
-        context.go(item.path);
+        if (item.push) {
+          context.push(item.path);
+        } else {
+          context.go(item.path);
+        }
       },
     );
   }
@@ -136,13 +140,34 @@ class AppShell extends ConsumerWidget {
       backgroundColor: AppColors.surfaceRaised,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.xl))),
       builder: (sheetContext) => SafeArea(
-        child: ListTile(
-          leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-          title: const Text('Sign out'),
-          onTap: () {
-            Navigator.pop(sheetContext);
-            ref.read(firebaseServiceProvider).signOut();
-          },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.settings_outlined, color: AppColors.accentBlue),
+              title: const Text('Settings'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                context.push('/settings');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.vpn_key_rounded, color: AppColors.accentBlue),
+              title: const Text('API Providers'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                context.push('/api-providers');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+              title: const Text('Sign out'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                ref.read(firebaseServiceProvider).signOut();
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -151,27 +176,42 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isWide = MediaQuery.of(context).size.width >= 900;
+    final currentPath = GoRouterState.of(context).matchedLocation;
+    final isHome = currentPath == '/home';
 
-    if (isWide) {
-      return Scaffold(
-        body: Row(
-          children: [
-            SizedBox(width: 260, child: _buildDrawerContent(context, ref, inDrawer: false)),
-            const VerticalDivider(width: 1),
-            Expanded(child: child),
-          ],
-        ),
-      );
-    }
+    final content = isWide
+        ? Scaffold(
+            body: Row(
+              children: [
+                SizedBox(width: 260, child: _buildDrawerContent(context, ref, inDrawer: false)),
+                const VerticalDivider(width: 1),
+                Expanded(child: child),
+              ],
+            ),
+          )
+        : Scaffold(
+            key: ref.watch(scaffoldKeyProvider),
+            drawer: Drawer(
+              width: 280,
+              backgroundColor: AppColors.surface,
+              child: _buildDrawerContent(context, ref, inDrawer: true),
+            ),
+            body: child,
+          );
 
-    return Scaffold(
-      key: ref.watch(scaffoldKeyProvider),
-      drawer: Drawer(
-        width: 280,
-        backgroundColor: AppColors.surface,
-        child: _buildDrawerContent(context, ref, inDrawer: true),
-      ),
-      body: child,
+    // Hardware back button: if we're on a top-level tab that isn't
+    // Home, go to Home instead of exiting the app. If a detail screen
+    // (Settings/API Providers/Usage Stats) is pushed on top, GoRouter's
+    // push() already gives it a proper back-stack entry, so the
+    // default pop behavior (handled automatically) takes it back here
+    // — this PopScope only governs the tab layer itself.
+    return PopScope(
+      canPop: isHome,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        context.go('/home');
+      },
+      child: content,
     );
   }
 }
@@ -180,5 +220,6 @@ class _NavItem {
   final String path;
   final IconData icon;
   final String label;
-  const _NavItem(this.path, this.icon, this.label);
+  final bool push;
+  const _NavItem(this.path, this.icon, this.label, {this.push = false});
 }

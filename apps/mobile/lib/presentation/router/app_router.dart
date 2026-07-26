@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/di/providers.dart';
+import '../screens/api_providers_screen.dart';
 import '../screens/artifacts_screen.dart';
 import '../screens/auth_screen.dart';
 import '../screens/chat_screen.dart';
@@ -41,7 +42,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/knowledge-base', builder: (context, state) => const KnowledgeBaseScreen()),
           GoRoute(path: '/prompt-library', builder: (context, state) => const PromptLibraryScreen()),
           GoRoute(path: '/history', builder: (context, state) => const HistoryScreen()),
+          // These three are pushed on top of the shell (see AppShell's
+          // push: true items), so GoRouter gives them a real back-stack
+          // entry — the system back button pops them correctly.
           GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+          GoRoute(path: '/api-providers', builder: (context, state) => const ApiProvidersScreen()),
           GoRoute(path: '/usage-stats', builder: (context, state) => const UsageStatsScreen()),
         ],
       ),
