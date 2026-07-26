@@ -1,17 +1,8 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-
-class CodeArtifact {
-  final String id;
-  final String fileName;
-  final String code;
-  final int lineCount;
-
-  CodeArtifact({required this.id, required this.fileName, required this.code, required this.lineCount});
-}
+import '../../core/theme/app_theme.dart';
 
 class ChatComposer extends StatefulWidget {
-  final Function(String message) onSend;
+  final void Function(String text) onSend;
   final bool isSending;
 
   const ChatComposer({super.key, required this.onSend, required this.isSending});
@@ -21,148 +12,182 @@ class ChatComposer extends StatefulWidget {
 }
 
 class _ChatComposerState extends State<ChatComposer> {
-  final TextEditingController _controller = TextEditingController();
-  final List<CodeArtifact> _artifacts = [];
-  bool _hasText = false;
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+
+  // If a single onChanged event adds more than this many characters,
+  // treat it as a paste rather than typing.
+  static const int _pasteCharThreshold = 300;
+  static const int _pasteLineThreshold = 8;
+
+  String? _attachedContent;
+  int _previousLength = 0;
 
   @override
   void initState() {
     super.initState();
-    _controller.addListener(() {
-      if (_hasText != _controller.text.isNotEmpty) {
-        setState(() => _hasText = _controller.text.isNotEmpty);
-      }
-      _checkForCodePaste();
-    });
+    _controller.addListener(_handleTextChange);
   }
 
-  void _checkForCodePaste() {
-    final text = _controller.text;
-    final lines = text.split('\n');
-    if (lines.length >= 15) {
+  void _handleTextChange() {
+    final current = _controller.text;
+    final delta = current.length - _previousLength;
+    _previousLength = current.length;
+
+    final lineCount = current.split('\n').length;
+    final looksLikeAPaste = delta >= _pasteCharThreshold || lineCount > _pasteLineThreshold;
+
+    if (looksLikeAPaste && _attachedContent == null) {
       setState(() {
-        _artifacts.add(CodeArtifact(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          fileName: 'pasted_file.txt',
-          code: text,
-          lineCount: lines.length,
-        ));
+        _attachedContent = current.trim();
         _controller.clear();
+        _previousLength = 0;
       });
     }
   }
 
-  void _handleSend() {
-    final text = _controller.text.trim();
-    if (text.isEmpty && _artifacts.isEmpty) return;
+  void _removeAttachment() {
+    setState(() => _attachedContent = null);
+  }
 
-    StringBuffer finalMessage = StringBuffer();
-    for (var artifact in _artifacts) {
-      finalMessage.writeln('```${artifact.fileName}');
-      finalMessage.writeln(artifact.code);
-      finalMessage.writeln('```\n');
+  void _submit() {
+    final typed = _controller.text.trim();
+    final attachment = _attachedContent;
+
+    if (typed.isEmpty && attachment == null) return;
+
+    final String message;
+    if (attachment != null) {
+      final lineCount = attachment.split('\n').length;
+      final fenced = '```text\n$attachment\n```';
+      message = typed.isEmpty ? fenced : '$typed\n\n$fenced';
+      // ignore: unused_local_variable
+      final _ = lineCount;
+    } else {
+      message = typed;
     }
-    if (text.isNotEmpty) finalMessage.writeln(text);
 
-    widget.onSend(finalMessage.toString().trim());
+    widget.onSend(message);
+    _controller.clear();
+    setState(() => _attachedContent = null);
+    _previousLength = 0;
+  }
 
-    setState(() {
-      _controller.clear();
-      _artifacts.clear();
-    });
+  @override
+  void dispose() {
+    _controller.removeListener(_handleTextChange);
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_artifacts.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8.0, left: 40),
-              child: Wrap(
-                spacing: 8,
-                children: _artifacts.map((a) => Chip(
-                  label: Text('${a.fileName} (${a.lineCount} lines)', style: const TextStyle(color: Colors.white, fontSize: 12)),
-                  backgroundColor: Colors.white.withOpacity(0.2),
-                  deleteIcon: const Icon(Icons.close, size: 14, color: Colors.white),
-                  onDeleted: () => setState(() => _artifacts.remove(a)),
-                )).toList(),
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_attachedContent != null) _buildAttachmentChip(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surface.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: AppColors.border),
               ),
-            ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.add, color: Colors.white, size: 28),
-                onPressed: () {},
-              ),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white.withOpacity(0.2)),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _controller,
-                              maxLines: 5,
-                              minLines: 1,
-                              style: const TextStyle(color: Colors.white),
-                              decoration: const InputDecoration(
-                                hintText: 'Message...',
-                                hintStyle: TextStyle(color: Colors.white54),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              ),
-                            ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.attach_file_rounded, color: AppColors.textSecondary),
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('File attachments are coming soon.')),
+                      );
+                    },
+                  ),
+                  Expanded(
+                    // Hard cap on visible height: the field never grows
+                    // past ~5 lines. Anything longer scrolls internally
+                    // instead of pushing the whole screen around — and
+                    // large pastes get intercepted above before they
+                    // ever reach this state.
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 120),
+                      child: Scrollbar(
+                        child: TextField(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          minLines: 1,
+                          maxLines: 5,
+                          style: const TextStyle(color: AppColors.textPrimary),
+                          decoration: InputDecoration(
+                            hintText: _attachedContent != null ? 'Add a message (optional)…' : 'Ask anything or create something…',
+                            hintStyle: const TextStyle(color: AppColors.textMuted),
+                            border: InputBorder.none,
                           ),
-                          Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: widget.isSending
-                                ? const Padding(
-                                    padding: EdgeInsets.all(8.0),
-                                    child: SizedBox(
-                                      width: 24, height: 24,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.cyanAccent),
-                                    ),
-                                  )
-                                : GestureDetector(
-                                    onTap: _hasText || _artifacts.isNotEmpty ? _handleSend : null,
-                                    child: Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: _hasText || _artifacts.isNotEmpty ? Colors.white : Colors.transparent,
-                                      ),
-                                      child: Icon(
-                                        _hasText || _artifacts.isNotEmpty ? Icons.arrow_upward_rounded : Icons.mic_none_rounded,
-                                        color: _hasText || _artifacts.isNotEmpty ? Colors.black : Colors.white70,
-                                        size: 20,
-                                      ),
-                                    ),
-                                  ),
-                          ),
-                        ],
+                          onSubmitted: (_) => _submit(),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                  Container(
+                    decoration: const BoxDecoration(gradient: AppColors.brandGradient, shape: BoxShape.circle),
+                    child: IconButton(
+                      icon: widget.isSending
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.arrow_upward_rounded, color: Colors.white),
+                      onPressed: widget.isSending ? null : _submit,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttachmentChip() {
+    final lineCount = _attachedContent!.split('\n').length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceRaised,
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(gradient: AppColors.brandGradient, borderRadius: BorderRadius.circular(AppRadii.sm)),
+              alignment: Alignment.center,
+              child: const Icon(Icons.description_rounded, color: Colors.white, size: 16),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Pasted content attached', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+                  Text('$lineCount lines · will send as an artifact', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.textMuted),
+              onPressed: _removeAttachment,
+            ),
+          ],
+        ),
       ),
     );
   }

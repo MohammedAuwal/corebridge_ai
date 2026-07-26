@@ -22,9 +22,14 @@ class ChatMessageBubble extends StatefulWidget {
 }
 
 class _ChatMessageBubbleState extends State<ChatMessageBubble> {
-  // Matches fenced code blocks: ```language\ncode\n```
-  // Captures the language tag (group 1, may be empty) and the code body (group 2).
   static final RegExp _codeBlockRegex = RegExp(r'```(\w*)\n([\s\S]*?)```', multiLine: true);
+
+  // Safety net for content that never got fenced (e.g. a raw paste that
+  // slipped through, or an AI response that dumped a huge unfenced
+  // block). Anything this long or with this many lines becomes a card
+  // even without ``` markers.
+  static const int _rawLengthThreshold = 600;
+  static const int _rawLineThreshold = 15;
 
   void _openArtifact(String title, String code, String language) {
     showModalBottomSheet(
@@ -39,16 +44,15 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
-  /// Splits message text into a sequence of plain-markdown segments and
-  /// code-block segments, so long code never gets dumped raw into the
-  /// chat bubble — it becomes a compact, tappable artifact card instead.
   List<Widget> _buildMessageContent(String text, BuildContext context, bool isUser) {
     final List<Widget> widgets = [];
     int lastEnd = 0;
     int codeBlockIndex = 0;
+    bool foundAnyFence = false;
 
     for (final match in _codeBlockRegex.allMatches(text)) {
-      // Plain text before this code block.
+      foundAnyFence = true;
+
       if (match.start > lastEnd) {
         final plain = text.substring(lastEnd, match.start).trim();
         if (plain.isNotEmpty) {
@@ -60,9 +64,6 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       final code = match.group(2) ?? '';
       final lineCount = code.trim().isEmpty ? 0 : code.trim().split('\n').length;
 
-      // Anything short stays inline as a normal code block instead of
-      // becoming a full artifact card — small snippets don't need a
-      // separate viewer.
       if (lineCount <= 8) {
         widgets.add(_buildInlineCode(code.trim(), language, isUser));
       } else {
@@ -78,11 +79,28 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       lastEnd = match.end;
     }
 
-    // Any trailing plain text after the last code block.
     if (lastEnd < text.length) {
       final plain = text.substring(lastEnd).trim();
       if (plain.isNotEmpty) {
         widgets.add(_buildMarkdownText(plain, isUser));
+      }
+    }
+
+    // Fallback: no fenced blocks were found at all, but the raw content
+    // is large enough that dumping it as plain text would blow up the
+    // bubble — wrap the whole thing as a card instead.
+    if (!foundAnyFence) {
+      final trimmed = text.trim();
+      final lineCount = trimmed.isEmpty ? 0 : trimmed.split('\n').length;
+      if (trimmed.length > _rawLengthThreshold || lineCount > _rawLineThreshold) {
+        return [
+          _buildArtifactCard(
+            title: 'Attachment',
+            language: 'text',
+            code: trimmed,
+            lineCount: lineCount,
+          ),
+        ];
       }
     }
 
@@ -139,9 +157,6 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
-  /// The compact reference card shown in the chat bubble instead of the
-  /// raw code. Tapping it opens the full artifact viewer — this is the
-  /// piece that stops long content from ever being dumped inline.
   Widget _buildArtifactCard({
     required String title,
     required String language,
