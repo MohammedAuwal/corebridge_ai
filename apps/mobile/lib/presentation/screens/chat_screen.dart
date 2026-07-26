@@ -4,6 +4,7 @@ import '../../core/di/providers.dart';
 import '../../core/providers/conversation_provider.dart';
 import '../../core/providers/selected_model_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../domain/entities/ai_stream_event.dart';
 import '../../domain/entities/message_entity.dart';
 import '../widgets/geo_mesh_background.dart';
 import '../widgets/chat_composer.dart';
@@ -59,8 +60,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  /// Creates a title from the first user message: short, human-readable,
-  /// truncated so it fits nicely in the History and drawer lists.
   String _titleFrom(String firstMessage) {
     final oneLine = firstMessage.replaceAll('\n', ' ').trim();
     if (oneLine.length <= 48) return oneLine;
@@ -74,14 +73,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (uid == null) return;
 
     final selectedModel = ref.read(selectedModelProvider);
+    final thinkingEnabled = selectedModel.supportsThinking && ref.read(thinkingModeEnabledProvider);
 
-    // Lazily create the real Firestore conversation on the very first
-    // message — this is what was missing before, causing History to
-    // always be empty.
     if (_conversationId == null) {
-      // Guard against double-creation: if a creation is already in
-      // flight (e.g. from a rapid double-tap on send), wait for that
-      // one instead of starting a second conversation.
       if (_conversationCreation != null) {
         await _conversationCreation;
       } else {
@@ -135,18 +129,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final sendMessageUseCase = ref.read(sendMessageUseCaseProvider);
 
     try {
-      await for (final partial in sendMessageUseCase(
+      await for (final AiStreamEvent event in sendMessageUseCase(
         uid: uid,
         conversationId: _conversationId!,
         userMessage: text,
         history: cleanHistory,
         provider: selectedModel.provider,
         model: selectedModel.model,
+        thinkingEnabled: thinkingEnabled,
       )) {
         final index = _messages.indexWhere((m) => m.id == placeholderId);
-        if (index != -1) {
+        if (index == -1) continue;
+
+        if (event.type == AiStreamEventType.thinking) {
           setState(() {
-            _messages[index] = _messages[index].copyWith(content: partial);
+            _messages[index] = _messages[index].copyWith(
+              thinking: _messages[index].thinking + event.text,
+              isThinkingStreaming: true,
+            );
+          });
+        } else {
+          setState(() {
+            _messages[index] = _messages[index].copyWith(
+              content: _messages[index].content + event.text,
+              isThinkingStreaming: false,
+            );
           });
         }
       }
@@ -155,7 +162,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final errorText = _friendlyError(e);
       if (index != -1) {
         setState(() {
-          _messages[index] = _messages[index].copyWith(content: errorText, isStreaming: false);
+          _messages[index] = _messages[index].copyWith(content: errorText, isStreaming: false, isThinkingStreaming: false);
           _errorMessageIds.add(placeholderId);
         });
       }
@@ -163,7 +170,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final index = _messages.indexWhere((m) => m.id == placeholderId);
       if (index != -1 && !_errorMessageIds.contains(placeholderId)) {
         setState(() {
-          _messages[index] = _messages[index].copyWith(isStreaming: false);
+          _messages[index] = _messages[index].copyWith(isStreaming: false, isThinkingStreaming: false);
         });
       }
       setState(() => _isSending = false);
