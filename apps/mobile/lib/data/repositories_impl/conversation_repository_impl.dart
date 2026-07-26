@@ -96,6 +96,17 @@ class ConversationRepositoryImpl implements ConversationRepository {
     }
   }
 
+
+  @override
+  Future<Result<void>> deleteConversation(String conversationId) async {
+    try {
+      await _conversations.doc(conversationId).delete();
+      return Result.success(null);
+    } catch (e) {
+      return Result.failure(ServerFailure(e.toString()));
+    }
+  }
+
   @override
   Stream<String> streamAssistantReply({
     required String conversationId,

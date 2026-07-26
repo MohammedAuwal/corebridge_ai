@@ -23,6 +23,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _isSending = false;
   bool _isLoadingHistory = false;
   String? _conversationId;
+  Future<void>? _conversationCreation;
 
   @override
   void initState() {
@@ -78,23 +79,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // message — this is what was missing before, causing History to
     // always be empty.
     if (_conversationId == null) {
-      final result = await ref.read(conversationRepositoryProvider).createConversation(
-            ownerId: uid,
-            title: _titleFrom(text),
+      // Guard against double-creation: if a creation is already in
+      // flight (e.g. from a rapid double-tap on send), wait for that
+      // one instead of starting a second conversation.
+      if (_conversationCreation != null) {
+        await _conversationCreation;
+      } else {
+        _conversationCreation = ref.read(conversationRepositoryProvider).createConversation(
+              ownerId: uid,
+              title: _titleFrom(text),
+            ).then((result) {
+          result.when(
+            success: (conversation) {
+              _conversationId = conversation.id;
+              ref.read(activeConversationIdProvider.notifier).state = conversation.id;
+            },
+            error: (failure) {
+              _conversationId = 'local-${DateTime.now().millisecondsSinceEpoch}';
+            },
           );
-      result.when(
-        success: (conversation) {
-          _conversationId = conversation.id;
-          ref.read(activeConversationIdProvider.notifier).state = conversation.id;
-        },
-        error: (failure) {
-          // Fall back to a local-only id so the chat still works even
-          // if Firestore write failed (e.g. offline) — it just won't
-          // show in History until connectivity returns and a retry
-          // succeeds on a future message.
-          _conversationId = 'local-${DateTime.now().millisecondsSinceEpoch}';
-        },
-      );
+        });
+        await _conversationCreation;
+      }
     }
 
     final userMessageId = DateTime.now().millisecondsSinceEpoch.toString();

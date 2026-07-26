@@ -10,6 +10,8 @@ abstract class ConversationRepository {
     String? projectId,
     required String title,
   });
+  Future<Result<void>> deleteConversation(String conversationId);
+
   Future<Result<MessageEntity>> appendMessage({
     required String conversationId,
     required MessageRole role,
