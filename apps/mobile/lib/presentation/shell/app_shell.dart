@@ -76,7 +76,7 @@ class AppShell extends ConsumerWidget {
                 children: [
                   ..._mainItems.map((item) => _drawerTile(context, ref, item, currentPath, inDrawer)),
                   const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(height: 1)),
-                  ..._settingsItems.map((item) => _drawerTile(context, item, currentPath, inDrawer)),
+                  ..._settingsItems.map((item) => _drawerTile(context, ref, item, currentPath, inDrawer)),
                 ],
               ),
             ),
