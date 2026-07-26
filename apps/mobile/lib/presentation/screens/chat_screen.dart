@@ -38,6 +38,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (uid == null) return;
 
     final selectedModel = ref.read(selectedModelProvider);
+
     final userMessageId = DateTime.now().millisecondsSinceEpoch.toString();
 
     setState(() {
@@ -63,6 +64,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ));
     });
 
+    // Only real prior turns go to the API — error bubbles are UI-only
+    // and must never be replayed back into the model's context.
     final cleanHistory = _messages
         .where((m) => m.id != placeholderId && !_errorMessageIds.contains(m.id))
         .toList();
@@ -90,7 +93,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final errorText = _friendlyError(e);
       if (index != -1) {
         setState(() {
-          _messages[index] = _messages[index].copyWith(content: 'Error: $errorText', isStreaming: false);
+          _messages[index] = _messages[index].copyWith(content: errorText, isStreaming: false);
           _errorMessageIds.add(placeholderId);
         });
       }
@@ -105,26 +108,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  void _rewriteMessage(int index) {
-    if (_isSending) return;
-    
-    // Find the last user message before this AI response
-    String? lastUserText;
-    for (int i = index - 1; i >= 0; i--) {
-      if (_messages[i].role == MessageRole.user) {
-        lastUserText = _messages[i].content;
-        break;
-      }
-    }
+  void _rewrite(MessageEntity assistantMessage) {
+    // Find the user message immediately before this assistant reply and
+    // resend it, replacing the old response.
+    final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
+    if (index <= 0) return;
 
-    if (lastUserText != null) {
-      // Remove the targeted AI message (and any errors) so they don't pollute history
-      setState(() {
-        _messages.removeAt(index);
-      });
-      // Resend the last user message
-      _send(lastUserText);
-    }
+    final userMessage = _messages[index - 1];
+    if (userMessage.role != MessageRole.user) return;
+
+    setState(() {
+      _messages.removeRange(index - 1, _messages.length);
+    });
+
+    _send(userMessage.content);
   }
 
   String _friendlyError(Object e) {
@@ -151,21 +148,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: _messages.isEmpty
                     ? const _EmptyChatState()
                     : ListView.builder(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.all(16),
                         itemCount: _messages.length,
                         itemBuilder: (context, index) {
                           final message = _messages[index];
-                          final isUser = message.role == MessageRole.user;
-                          
-                          // If it's a UI error bubble, we still show the old red block
-                          if (_errorMessageIds.contains(message.id)) {
-                             return _buildErrorBubble(context, message.content);
-                          }
+                          final isError = _errorMessageIds.contains(message.id);
 
-                          // Otherwise, use our shiny new premium bubble!
                           return ChatMessageBubble(
                             message: message,
-                            onRewrite: isUser ? null : () => _rewriteMessage(index),
+                            isError: isError,
+                            onRewrite: (!isError && message.role == MessageRole.assistant && !message.isStreaming)
+                                ? () => _rewrite(message)
+                                : null,
                           );
                         },
                       ),
@@ -179,23 +173,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ],
       ),
     );
-  }
-
-  Widget _buildErrorBubble(BuildContext context, String text) {
-     return Align(
-        alignment: Alignment.centerLeft,
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-          padding: const EdgeInsets.all(14),
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-          decoration: BoxDecoration(
-            color: Colors.red.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(AppRadii.lg),
-            border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
-          ),
-          child: Text(text, style: TextStyle(color: Colors.redAccent.shade100)),
-        ),
-     );
   }
 }
 
