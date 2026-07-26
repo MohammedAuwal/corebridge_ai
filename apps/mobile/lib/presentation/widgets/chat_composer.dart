@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import 'model_picker_chip.dart';
 
 class ChatComposer extends StatefulWidget {
   final void Function(String text) onSend;
   final bool isSending;
+  final void Function()? onVoiceInput;
 
-  const ChatComposer({super.key, required this.onSend, required this.isSending});
+  const ChatComposer({
+    super.key,
+    required this.onSend,
+    required this.isSending,
+    this.onVoiceInput,
+  });
 
   @override
   State<ChatComposer> createState() => _ChatComposerState();
@@ -15,8 +22,6 @@ class _ChatComposerState extends State<ChatComposer> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
 
-  // If a single onChanged event adds more than this many characters,
-  // treat it as a paste rather than typing.
   static const int _pasteCharThreshold = 300;
   static const int _pasteLineThreshold = 8;
 
@@ -58,11 +63,8 @@ class _ChatComposerState extends State<ChatComposer> {
 
     final String message;
     if (attachment != null) {
-      final lineCount = attachment.split('\n').length;
       final fenced = '```text\n$attachment\n```';
       message = typed.isEmpty ? fenced : '$typed\n\n$fenced';
-      // ignore: unused_local_variable
-      final _ = lineCount;
     } else {
       message = typed;
     }
@@ -72,6 +74,18 @@ class _ChatComposerState extends State<ChatComposer> {
     setState(() => _attachedContent = null);
     _previousLength = 0;
   }
+
+  void _handleVoiceTap() {
+    if (widget.onVoiceInput != null) {
+      widget.onVoiceInput!();
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Voice input is coming soon.')),
+    );
+  }
+
+  bool get _hasText => _controller.text.trim().isNotEmpty || _attachedContent != null;
 
   @override
   void dispose() {
@@ -86,62 +100,84 @@ class _ChatComposerState extends State<ChatComposer> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (_attachedContent != null) _buildAttachmentChip(),
+
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.surface.withValues(alpha: 0.85),
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: AppColors.border),
+                // No colored border — flat fill only.
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.attach_file_rounded, color: AppColors.textSecondary),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('File attachments are coming soon.')),
-                      );
-                    },
-                  ),
-                  Expanded(
-                    // Hard cap on visible height: the field never grows
-                    // past ~5 lines. Anything longer scrolls internally
-                    // instead of pushing the whole screen around — and
-                    // large pastes get intercepted above before they
-                    // ever reach this state.
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 120),
-                      child: Scrollbar(
-                        child: TextField(
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          minLines: 1,
-                          maxLines: 5,
-                          style: const TextStyle(color: AppColors.textPrimary),
-                          decoration: InputDecoration(
-                            hintText: _attachedContent != null ? 'Add a message (optional)…' : 'Ask anything or create something…',
-                            hintStyle: const TextStyle(color: AppColors.textMuted),
-                            border: InputBorder.none,
-                          ),
-                          onSubmitted: (_) => _submit(),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 120),
+                    child: Scrollbar(
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        minLines: 1,
+                        maxLines: 5,
+                        cursorColor: AppColors.accentBlue,
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+                        onChanged: (_) => setState(() {}), // refresh mic/send swap
+                        decoration: InputDecoration(
+                          hintText: _attachedContent != null ? 'Add a message (optional)…' : 'Message CoreBridge…',
+                          hintStyle: const TextStyle(color: AppColors.textMuted),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         ),
+                        onSubmitted: (_) => _submit(),
                       ),
                     ),
                   ),
-                  Container(
-                    decoration: const BoxDecoration(gradient: AppColors.brandGradient, shape: BoxShape.circle),
-                    child: IconButton(
-                      icon: widget.isSending
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.arrow_upward_rounded, color: Colors.white),
-                      onPressed: widget.isSending ? null : _submit,
-                    ),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.textSecondary),
+                        tooltip: 'Add files',
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('File attachments are coming soon.')),
+                          );
+                        },
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4),
+                        child: ModelPickerChip(),
+                      ),
+                      const Spacer(),
+                      // Voice input — shown whenever there's nothing typed
+                      // yet, matching the sketch's waveform icon next to
+                      // the send button.
+                      if (!_hasText)
+                        IconButton(
+                          icon: const Icon(Icons.graphic_eq_rounded, color: AppColors.textSecondary),
+                          tooltip: 'Voice input',
+                          onPressed: _handleVoiceTap,
+                        ),
+                      Container(
+                        decoration: const BoxDecoration(gradient: AppColors.brandGradient, shape: BoxShape.circle),
+                        margin: const EdgeInsets.only(right: 2),
+                        child: IconButton(
+                          icon: widget.isSending
+                              ? const SizedBox(
+                                  width: 18, height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.arrow_upward_rounded, color: Colors.white),
+                          onPressed: widget.isSending ? null : _submit,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -161,7 +197,6 @@ class _ChatComposerState extends State<ChatComposer> {
         decoration: BoxDecoration(
           color: AppColors.surfaceRaised,
           borderRadius: BorderRadius.circular(AppRadii.md),
-          border: Border.all(color: AppColors.border),
         ),
         child: Row(
           children: [
