@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/di/providers.dart';
@@ -228,7 +229,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 label: 'Default Model',
                 subtitle: 'Choose the default AI model.',
                 trailing: _chevronValue(selectedModel.label),
-                onTap: null, // model is switched from the composer's model picker
+                onTap: null, 
               ),
               _row(
                 icon: Icons.mood_outlined,

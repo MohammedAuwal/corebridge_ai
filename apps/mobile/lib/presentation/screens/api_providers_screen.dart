@@ -25,11 +25,6 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
   UserApiKeys _keys = const UserApiKeys();
   bool _isLoading = true;
 
-  // CoreBridge's ai-router currently supports exactly these four
-  // providers. (The reference design showed Meta Llama/Cohere/Mistral
-  // as additional examples — those aren't wired into the backend yet,
-  // so they're left out here rather than shown as fake "Connect"
-  // options that wouldn't actually work.)
   static const _providers = [
     _ProviderMeta('claude', 'Anthropic (Claude)', 'claude-sonnet-5', Color(0xFFD97757), Icons.auto_awesome_rounded),
     _ProviderMeta('openai', 'OpenAI', 'gpt-5.6-sol', Color(0xFF10A37F), Icons.bubble_chart_rounded),
@@ -162,7 +157,7 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
                     child: Text('No providers connected yet.', style: Theme.of(context).textTheme.bodyMedium),
                   )
                 else
-                  ...connected.map((p) => _buildProviderTile(p, isDefault: p.provider == defaultProvider)),
+                  ...connected.map((p) => _buildProviderTile(p, isDefault: p.key == defaultProvider)),
                 if (available.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   Text('Available Providers', style: Theme.of(context).textTheme.titleLarge),
