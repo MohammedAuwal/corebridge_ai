@@ -24,12 +24,23 @@ class ChatMessageBubble extends StatefulWidget {
 class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   static final RegExp _codeBlockRegex = RegExp(r'```(\w*)\n([\s\S]*?)```', multiLine: true);
 
-  // Safety net for content that never got fenced (e.g. a raw paste that
-  // slipped through, or an AI response that dumped a huge unfenced
-  // block). Anything this long or with this many lines becomes a card
-  // even without ``` markers.
   static const int _rawLengthThreshold = 600;
   static const int _rawLineThreshold = 15;
+
+  bool _thinkingExpanded = false;
+
+  @override
+  void didUpdateWidget(covariant ChatMessageBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Auto-expand while actively thinking, auto-collapse the moment the
+    // real answer starts streaming — matches how thinking UIs elsewhere
+    // behave: visible while reasoning, tucked away once there's an answer.
+    if (widget.message.isThinkingStreaming && !oldWidget.message.isThinkingStreaming) {
+      _thinkingExpanded = true;
+    } else if (!widget.message.isThinkingStreaming && widget.message.content.isNotEmpty && oldWidget.message.content.isEmpty) {
+      _thinkingExpanded = false;
+    }
+  }
 
   void _openArtifact(String title, String code, String language) {
     showModalBottomSheet(
@@ -40,6 +51,65 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         title: title,
         content: code,
         language: language,
+      ),
+    );
+  }
+
+  Widget _buildThinkingSection() {
+    final thinking = widget.message.thinking;
+    if (thinking.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.25),
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(AppRadii.md),
+              onTap: () => setState(() => _thinkingExpanded = !_thinkingExpanded),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Row(
+                  children: [
+                    if (widget.message.isThinkingStreaming)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentBlue),
+                      )
+                    else
+                      const Icon(Icons.psychology_outlined, size: 16, color: AppColors.accentBlue),
+                    const SizedBox(width: 8),
+                    Text(
+                      widget.message.isThinkingStreaming ? 'Thinking…' : 'Thought process',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      _thinkingExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                      size: 18,
+                      color: AppColors.textMuted,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_thinkingExpanded)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: Text(
+                  thinking,
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4, fontStyle: FontStyle.italic),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -86,10 +156,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       }
     }
 
-    // Fallback: no fenced blocks were found at all, but the raw content
-    // is large enough that dumping it as plain text would blow up the
-    // bubble — wrap the whole thing as a card instead.
-    if (!foundAnyFence) {
+    if (!foundAnyFence && isUser) {
       final trimmed = text.trim();
       final lineCount = trimmed.isEmpty ? 0 : trimmed.split('\n').length;
       if (trimmed.length > _rawLengthThreshold || lineCount > _rawLineThreshold) {
@@ -219,8 +286,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   Widget build(BuildContext context) {
     final isUser = widget.message.role == MessageRole.user;
     final content = widget.message.content;
+    final hasThinking = widget.message.thinking.isNotEmpty;
 
-    if (content.isEmpty && widget.message.isStreaming) {
+    if (content.isEmpty && !hasThinking && widget.message.isStreaming) {
       return Align(
         alignment: Alignment.centerLeft,
         child: Container(
@@ -245,24 +313,26 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       child: Column(
         crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            padding: const EdgeInsets.all(14),
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
-            decoration: BoxDecoration(
-              gradient: isUser ? AppColors.brandGradient : null,
-              color: isUser ? null : (widget.isError ? Colors.red.withValues(alpha: 0.12) : AppColors.surface),
-              borderRadius: BorderRadius.circular(AppRadii.lg),
-              border: isUser
-                  ? null
-                  : Border.all(color: widget.isError ? Colors.redAccent.withValues(alpha: 0.4) : AppColors.border),
+          if (!isUser && hasThinking) _buildThinkingSection(),
+          if (content.isNotEmpty || isUser)
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.all(14),
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
+              decoration: BoxDecoration(
+                gradient: isUser ? AppColors.brandGradient : null,
+                color: isUser ? null : (widget.isError ? Colors.red.withValues(alpha: 0.12) : AppColors.surface),
+                borderRadius: BorderRadius.circular(AppRadii.lg),
+                border: isUser
+                    ? null
+                    : Border.all(color: widget.isError ? Colors.redAccent.withValues(alpha: 0.4) : AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _buildMessageContent(content, context, isUser),
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: _buildMessageContent(content, context, isUser),
-            ),
-          ),
-          if (!isUser && !widget.message.isStreaming && !widget.isError)
+          if (!isUser && !widget.message.isStreaming && !widget.isError && content.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 4),
               child: Row(

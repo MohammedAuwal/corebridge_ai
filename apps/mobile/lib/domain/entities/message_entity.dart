@@ -7,7 +7,9 @@ class MessageEntity extends Equatable {
   final String conversationId;
   final MessageRole role;
   final String content;
+  final String thinking;
   final bool isStreaming;
+  final bool isThinkingStreaming;
   final DateTime createdAt;
 
   const MessageEntity({
@@ -15,7 +17,9 @@ class MessageEntity extends Equatable {
     required this.conversationId,
     required this.role,
     required this.content,
+    this.thinking = '',
     this.isStreaming = false,
+    this.isThinkingStreaming = false,
     required this.createdAt,
   });
 
@@ -28,6 +32,7 @@ class MessageEntity extends Equatable {
         orElse: () => MessageRole.user,
       ),
       content: (map['content'] as String?) ?? '',
+      thinking: (map['thinking'] as String?) ?? '',
       isStreaming: (map['isStreaming'] as bool?) ?? false,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
     );
@@ -37,22 +42,30 @@ class MessageEntity extends Equatable {
     return {
       'role': role.name,
       'content': content,
+      'thinking': thinking,
       'isStreaming': isStreaming,
       'createdAt': createdAt.millisecondsSinceEpoch,
     };
   }
 
-  MessageEntity copyWith({String? content, bool? isStreaming}) {
+  MessageEntity copyWith({
+    String? content,
+    String? thinking,
+    bool? isStreaming,
+    bool? isThinkingStreaming,
+  }) {
     return MessageEntity(
       id: id,
       conversationId: conversationId,
       role: role,
       content: content ?? this.content,
+      thinking: thinking ?? this.thinking,
       isStreaming: isStreaming ?? this.isStreaming,
+      isThinkingStreaming: isThinkingStreaming ?? this.isThinkingStreaming,
       createdAt: createdAt,
     );
   }
 
   @override
-  List<Object?> get props => [id, conversationId, role, content, isStreaming, createdAt];
+  List<Object?> get props => [id, conversationId, role, content, thinking, isStreaming, isThinkingStreaming, createdAt];
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../domain/entities/ai_stream_event.dart';
 
 class AiRouterClient {
   final String supabaseFunctionsBaseUrl;
@@ -8,18 +9,15 @@ class AiRouterClient {
 
   AiRouterClient(this.supabaseFunctionsBaseUrl);
 
-  Stream<String> streamCompletion({
+  Stream<AiStreamEvent> streamCompletion({
     required String provider,
     required String model,
     required List<Map<String, String>> messages,
     required String apiKey,
+    bool thinkingEnabled = false,
   }) async* {
     if (supabaseFunctionsBaseUrl.trim().isEmpty) {
-      throw StateError(
-        'App was built without SUPABASE_FUNCTIONS_URL. This build is missing '
-        'a required --dart-define — rebuild with the correct value '
-        '(see run_dev.sh locally, or the SUPABASE_FUNCTIONS_URL secret in CI).',
-      );
+      throw StateError('App was built without SUPABASE_FUNCTIONS_URL. Rebuild with the correct --dart-define.');
     }
 
     final firebaseUser = FirebaseAuth.instance.currentUser;
@@ -31,17 +29,15 @@ class AiRouterClient {
     final uri = Uri.parse('$supabaseFunctionsBaseUrl/ai-router');
 
     final request = await _httpClient.postUrl(uri);
-    request.headers.set('Authorization', 'Bearer $idToken');
-    
-    // Explicit UTF-8 encoding so emojis/special characters don't crash the request
     request.headers.contentType = ContentType('application', 'json', charset: 'utf-8');
-    
-    // THE FIX: We actually put the apiKey in the payload now!
+    request.headers.set('Authorization', 'Bearer $idToken');
+
     final bodyBytes = utf8.encode(jsonEncode({
       'provider': provider,
       'model': model,
       'messages': messages,
       'apiKey': apiKey,
+      'thinkingEnabled': thinkingEnabled,
     }));
     request.add(bodyBytes);
 
@@ -69,8 +65,15 @@ class AiRouterClient {
           if (decoded['error'] != null) {
             throw HttpException(decoded['error'] as String);
           }
+          final thinkingDelta = decoded['thinking'] as String?;
+          if (thinkingDelta != null && thinkingDelta.isNotEmpty) {
+            yield AiStreamEvent(type: AiStreamEventType.thinking, text: thinkingDelta);
+            continue;
+          }
           final delta = decoded['delta'] as String?;
-          if (delta != null && delta.isNotEmpty) yield delta;
+          if (delta != null && delta.isNotEmpty) {
+            yield AiStreamEvent(type: AiStreamEventType.content, text: delta);
+          }
         } catch (e) {
           if (e is HttpException) rethrow;
           continue;

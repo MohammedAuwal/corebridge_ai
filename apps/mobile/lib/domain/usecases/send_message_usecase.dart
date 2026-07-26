@@ -1,3 +1,4 @@
+import '../entities/ai_stream_event.dart';
 import '../entities/message_entity.dart';
 import '../repositories/conversation_repository.dart';
 import '../repositories/user_settings_repository.dart';
@@ -8,21 +9,20 @@ class SendMessageUseCase {
 
   SendMessageUseCase(this._conversationRepository, this._userSettingsRepository);
 
-  Stream<String> call({
+  Stream<AiStreamEvent> call({
     required String uid,
     required String conversationId,
     required String userMessage,
     required List<MessageEntity> history,
     required String provider,
     required String model,
+    bool thinkingEnabled = false,
   }) async* {
     final apiKeys = await _userSettingsRepository.getApiKeys(uid);
     final apiKey = apiKeys.forProvider(provider);
 
     if (apiKey == null || apiKey.trim().isEmpty) {
-      // DEBUG: This will show us EXACTLY what the app pulled from Firestore
-      final readKeys = apiKeys.toMap().toString();
-      throw StateError('No API key set for $provider. \n\nDEBUG - The app found this in the database: $readKeys');
+      throw StateError('No API key set for $provider. Add one in Settings → AI Providers.');
     }
 
     await _conversationRepository.appendMessage(
@@ -36,22 +36,26 @@ class SendMessageUseCase {
       {'role': 'user', 'content': userMessage},
     ];
 
-    final buffer = StringBuffer();
-    await for (final delta in _conversationRepository.streamAssistantReply(
+    final contentBuffer = StringBuffer();
+
+    await for (final event in _conversationRepository.streamAssistantReply(
       conversationId: conversationId,
       provider: provider,
       model: model,
       messages: contextMessages,
       apiKey: apiKey,
+      thinkingEnabled: thinkingEnabled,
     )) {
-      buffer.write(delta);
-      yield buffer.toString();
+      if (event.type == AiStreamEventType.content) {
+        contentBuffer.write(event.text);
+      }
+      yield event;
     }
 
     await _conversationRepository.appendMessage(
       conversationId: conversationId,
       role: MessageRole.assistant,
-      content: buffer.toString(),
+      content: contentBuffer.toString(),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/error/failures.dart';
 import '../../core/network/api_client.dart';
+import '../../domain/entities/ai_stream_event.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../../domain/entities/message_entity.dart';
 import '../../domain/repositories/conversation_repository.dart';
@@ -67,6 +68,16 @@ class ConversationRepositoryImpl implements ConversationRepository {
   }
 
   @override
+  Future<Result<void>> deleteConversation(String conversationId) async {
+    try {
+      await _conversations.doc(conversationId).delete();
+      return Result.success(null);
+    } catch (e) {
+      return Result.failure(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
   Future<Result<MessageEntity>> appendMessage({
     required String conversationId,
     required MessageRole role,
@@ -96,30 +107,21 @@ class ConversationRepositoryImpl implements ConversationRepository {
     }
   }
 
-
   @override
-  Future<Result<void>> deleteConversation(String conversationId) async {
-    try {
-      await _conversations.doc(conversationId).delete();
-      return Result.success(null);
-    } catch (e) {
-      return Result.failure(ServerFailure(e.toString()));
-    }
-  }
-
-  @override
-  Stream<String> streamAssistantReply({
+  Stream<AiStreamEvent> streamAssistantReply({
     required String conversationId,
     required String provider,
     required String model,
     required List<Map<String, String>> messages,
     required String apiKey,
+    bool thinkingEnabled = false,
   }) {
     return _aiRouter.streamCompletion(
       provider: provider,
       model: model,
       messages: messages,
       apiKey: apiKey,
+      thinkingEnabled: thinkingEnabled,
     );
   }
 }
