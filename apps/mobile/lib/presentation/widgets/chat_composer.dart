@@ -198,19 +198,19 @@ class _ChatComposerState extends State<ChatComposer> {
     setState(() => _isListening = true);
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final typed = _controller.text.trim();
     final attachment = _attachedContent;
 
     if (typed.isEmpty && attachment == null && _attachedImages.isEmpty) return;
 
-    // Force-stop the mic so no further partial-result callback can write
-    // leftover words back into the box after we clear it below.
+    // Await the stop so the guard flag inside VoiceInputService is fully
+    // in effect before we build and clear anything below — belt-and-
+    // braces on top of the service's own internal guard.
     if (_isListening) {
-      _voiceInput.stopListening();
+      await _voiceInput.stopListening();
       _isListening = false;
     }
-
     final String message;
     if (attachment != null) {
       final fenced = '```text\n$attachment\n```';

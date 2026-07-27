@@ -8,6 +8,13 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 /// detects an involuntary session end and immediately opens a new one,
 /// carrying forward everything recognized so far. Recording only truly
 /// stops when stopListening() is called deliberately (mic tap or send).
+///
+/// It's also possible for the native engine to deliver one last result
+/// AFTER a manual stop has been requested (an in-flight callback that
+/// was already queued). _manualStop guards against that straggler ever
+/// reaching the caller — once a deliberate stop begins, no further
+/// onResult calls fire, so a caller that already cleared its text field
+/// (e.g. right after tapping send) won't see it silently repopulate.
 class VoiceInputService {
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isInitialized = false;
@@ -37,6 +44,13 @@ class VoiceInputService {
   Future<void> _startSession() async {
     await _speech.listen(
       onResult: (result) {
+        // A manual stop may already be in progress even though this
+        // callback — queued moments earlier by the native engine — is
+        // only firing now. Drop it rather than let stale speech
+        // overwrite whatever the caller has already done (like clearing
+        // the input after send).
+        if (_manualStop) return;
+
         final combined = _committedText.isEmpty
             ? result.recognizedWords
             : '$_committedText ${result.recognizedWords}';
@@ -44,9 +58,6 @@ class VoiceInputService {
         _onResult?.call(combined, false);
 
         if (result.finalResult) {
-          // Bank this session's words. If a new session opens after
-          // this (because the pause was involuntary), it appends after
-          // this point instead of overwriting from scratch.
           _committedText = combined.trim();
         }
       },
@@ -75,6 +86,10 @@ class VoiceInputService {
     return true;
   }
 
+  /// Ends dictation deliberately. Sets the guard flag BEFORE awaiting
+  /// the native stop call, so even a synchronous (non-awaited) call to
+  /// this method from the caller immediately blocks any further result
+  /// delivery — no race window for a stray callback to sneak through.
   Future<void> stopListening() async {
     _manualStop = true;
     await _speech.stop();
