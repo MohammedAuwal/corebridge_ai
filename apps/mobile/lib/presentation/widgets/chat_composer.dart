@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/services/voice_input_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -166,7 +167,7 @@ class _ChatComposerState extends State<ChatComposer> {
   Future<void> _toggleVoiceInput() async {
     if (_isListening) {
       await _voiceInput.stopListening();
-      setState(() => _isListening = false);
+      if (mounted) setState(() => _isListening = false);
       return;
     }
 
@@ -203,6 +204,13 @@ class _ChatComposerState extends State<ChatComposer> {
 
     if (typed.isEmpty && attachment == null && _attachedImages.isEmpty) return;
 
+    // Force-stop the mic so no further partial-result callback can write
+    // leftover words back into the box after we clear it below.
+    if (_isListening) {
+      _voiceInput.stopListening();
+      _isListening = false;
+    }
+
     final String message;
     if (attachment != null) {
       final fenced = '```text\n$attachment\n```';
@@ -234,6 +242,11 @@ class _ChatComposerState extends State<ChatComposer> {
 
   @override
   Widget build(BuildContext context) {
+    // Voice control stays visible for the whole recording, even once
+    // partial speech results start filling the text field — otherwise
+    // the mic (and its recording indicator) would vanish mid-sentence.
+    final showVoiceControl = !widget.isSending && (_isListening || !_hasText);
+
     return SafeArea(
       top: false,
       child: Padding(
@@ -291,15 +304,14 @@ class _ChatComposerState extends State<ChatComposer> {
                         child: ModelPickerChip(),
                       ),
                       const Spacer(),
-                      if (!widget.isSending && !_hasText)
-                        IconButton(
-                          icon: Icon(
-                            _isListening ? Icons.mic_rounded : Icons.graphic_eq_rounded,
-                            color: _isListening ? AppColors.accentBlue : AppColors.textSecondary,
-                          ),
-                          tooltip: 'Voice input',
-                          onPressed: _toggleVoiceInput,
-                        ),
+                      if (showVoiceControl)
+                        _isListening
+                            ? _BreathingMicButton(onTap: _toggleVoiceInput)
+                            : IconButton(
+                                icon: const Icon(Icons.graphic_eq_rounded, color: AppColors.textSecondary),
+                                tooltip: 'Voice input',
+                                onPressed: _toggleVoiceInput,
+                              ),
                       Container(
                         decoration: BoxDecoration(
                           gradient: widget.isSending ? null : AppColors.brandGradient,
@@ -400,6 +412,52 @@ class _ChatComposerState extends State<ChatComposer> {
               icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.textMuted),
               onPressed: _removeAttachment,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A mic button that breathes — a soft glow behind the icon pulses in
+/// place while recording, so it's obvious the app is actively listening.
+/// Tapping it (same tap target as the plain mic button it replaces)
+/// stops recording, same as before.
+class _BreathingMicButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _BreathingMicButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accentBlue.withValues(alpha: 0.30),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.accentBlue.withValues(alpha: 0.55),
+                    blurRadius: 14,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+            )
+                .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                .scaleXY(begin: 0.85, end: 1.2, duration: 800.ms, curve: Curves.easeInOut)
+                .fade(begin: 0.55, end: 1.0, duration: 800.ms, curve: Curves.easeInOut),
+            const Icon(Icons.mic_rounded, color: AppColors.accentBlue, size: 20),
           ],
         ),
       ),
