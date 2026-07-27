@@ -1,9 +1,19 @@
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+/// Wraps continuous dictation. The native speech engine ends its own
+/// recognition session after a few seconds of silence — that's outside
+/// our control. Rather than surface that as "recording stopped" (which
+/// silently drops anything said after a natural pause), this service
+/// detects an involuntary session end and immediately opens a new one,
+/// carrying forward everything recognized so far. Recording only truly
+/// stops when stopListening() is called deliberately (mic tap or send).
 class VoiceInputService {
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isInitialized = false;
+  bool _manualStop = true;
+  String _committedText = '';
+  void Function(String recognizedText, bool isFinal)? _onResult;
 
   bool get isListening => _speech.isListening;
 
@@ -13,32 +23,65 @@ class VoiceInputService {
     final micStatus = await Permission.microphone.request();
     if (!micStatus.isGranted) return false;
 
-    _isInitialized = await _speech.initialize();
+    _isInitialized = await _speech.initialize(onStatus: _handleStatus);
     return _isInitialized;
   }
 
-  /// Starts listening. onResult fires repeatedly with partial text as the
-  /// user speaks; isFinal is true on the last update for that utterance.
+  void _handleStatus(String status) {
+    final sessionEndedOnItsOwn = status == 'done' || status == 'notListening';
+    if (sessionEndedOnItsOwn && !_manualStop) {
+      _startSession();
+    }
+  }
+
+  Future<void> _startSession() async {
+    await _speech.listen(
+      onResult: (result) {
+        final combined = _committedText.isEmpty
+            ? result.recognizedWords
+            : '$_committedText ${result.recognizedWords}';
+
+        _onResult?.call(combined, false);
+
+        if (result.finalResult) {
+          // Bank this session's words. If a new session opens after
+          // this (because the pause was involuntary), it appends after
+          // this point instead of overwriting from scratch.
+          _committedText = combined.trim();
+        }
+      },
+      listenFor: const Duration(seconds: 60),
+      pauseFor: const Duration(seconds: 6),
+      partialResults: true,
+    );
+  }
+
+  /// Starts continuous dictation. onResult fires repeatedly with the
+  /// FULL text spoken so far across the entire session — including
+  /// across any pauses where the engine restarted itself internally.
+  /// isFinal is always false here; call stopListening() to end
+  /// dictation deliberately.
   Future<bool> startListening({
     required void Function(String recognizedText, bool isFinal) onResult,
   }) async {
     final ready = await _ensureInitialized();
     if (!ready) return false;
 
-    await _speech.listen(
-      onResult: (result) => onResult(result.recognizedWords, result.finalResult),
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 3),
-      partialResults: true,
-    );
+    _committedText = '';
+    _manualStop = false;
+    _onResult = onResult;
+
+    await _startSession();
     return true;
   }
 
   Future<void> stopListening() async {
+    _manualStop = true;
     await _speech.stop();
   }
 
   void dispose() {
+    _manualStop = true;
     _speech.cancel();
   }
 }
