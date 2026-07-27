@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/constants/ai_models.dart';
 import '../../core/error/failures.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/cancel_token.dart';
@@ -121,6 +122,12 @@ class ConversationRepositoryImpl implements ConversationRepository {
     bool thinkingEnabled = false,
     CancelToken? cancelToken,
   }) {
+    // Some providers' default/selected model can't see images at all
+    // (e.g. Qwen3.7 Max is text-only). When attachments are present,
+    // swap to that provider's vision-capable model for this call only —
+    // the user's picked model in the UI/history is untouched.
+    final effectiveModel = attachments.isNotEmpty ? AiModels.visionModelFor(provider, model) : model;
+
     final List<Map<String, dynamic>> messages = [
       ...history,
       _buildUserTurn(userMessage, attachments),
@@ -128,7 +135,7 @@ class ConversationRepositoryImpl implements ConversationRepository {
 
     return _aiRouter.streamCompletion(
       provider: provider,
-      model: model,
+      model: effectiveModel,
       messages: messages,
       apiKey: apiKey,
       thinkingEnabled: thinkingEnabled,
