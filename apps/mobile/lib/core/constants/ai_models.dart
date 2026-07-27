@@ -15,7 +15,7 @@ class AiModels {
   static const String openAiDefault = 'gpt-5.6-sol';
   static const String openAiBalanced = 'gpt-5.6-terra';
   static const String openAiFast = 'gpt-5.6-luna';
-  static const String geminiDefault = 'gemini-3.1-pro';
+  static const String geminiDefault = 'gemini-3.1-pro-preview';
   static const String geminiFast = 'gemini-3.6-flash';
   static const String qwenDefault = 'qwen3.7-max';
   static const String qwenFast = 'qwen-plus';

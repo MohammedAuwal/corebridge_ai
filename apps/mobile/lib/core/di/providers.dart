@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
-
 import '../../data/remote/cloudinary/cloudinary_service.dart';
 import '../../data/remote/firebase/firebase_service.dart';
 import '../../data/remote/supabase/supabase_service.dart';
@@ -18,38 +17,41 @@ import '../../domain/repositories/project_repository.dart';
 import '../../domain/repositories/user_settings_repository.dart';
 import '../../domain/usecases/create_artifact_usecase.dart';
 import '../../domain/usecases/send_message_usecase.dart';
+import '../network/api_client.dart';
 
 final firebaseAuthProvider = Provider<FirebaseAuth>((ref) => FirebaseAuth.instance);
 final firestoreProvider = Provider<FirebaseFirestore>((ref) => FirebaseFirestore.instance);
 final supabaseClientProvider = Provider<SupabaseClient>((ref) => Supabase.instance.client);
-
 final supabaseFunctionsUrlProvider = Provider<String>((ref) {
   const url = String.fromEnvironment('SUPABASE_FUNCTIONS_URL');
   return url;
 });
-
 final firebaseServiceProvider = Provider<FirebaseService>((ref) {
   return FirebaseService(
     auth: ref.watch(firebaseAuthProvider),
     firestore: ref.watch(firestoreProvider),
   );
 });
-
 final supabaseServiceProvider = Provider<SupabaseService>((ref) {
   return SupabaseService(ref.watch(supabaseClientProvider));
 });
-
 final cloudinaryServiceProvider = Provider<CloudinaryService>((ref) {
   const cloudName = String.fromEnvironment('CLOUDINARY_CLOUD_NAME', defaultValue: '');
   return const CloudinaryService(cloudName);
 });
-
 final authStateProvider = StreamProvider<User?>((ref) {
   return ref.watch(firebaseServiceProvider).authStateChanges;
 });
-
 final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
   return ProjectRepositoryImpl(ref.watch(firestoreProvider));
+});
+
+/// Standalone AiRouterClient, separate from ConversationRepositoryImpl's
+/// internal instance. Needed so screens like ApiProvidersScreen can call
+/// listModels() (auto-detecting which models a key can access) without
+/// going through the conversation/chat repository at all.
+final aiRouterClientProvider = Provider<AiRouterClient>((ref) {
+  return AiRouterClient(ref.watch(supabaseFunctionsUrlProvider));
 });
 
 final conversationRepositoryProvider = Provider<ConversationRepository>((ref) {
@@ -58,29 +60,24 @@ final conversationRepositoryProvider = Provider<ConversationRepository>((ref) {
     ref.watch(supabaseFunctionsUrlProvider),
   );
 });
-
 final artifactRepositoryProvider = Provider<ArtifactRepository>((ref) {
   return ArtifactRepositoryImpl(ref.watch(firestoreProvider));
 });
-
 final fileRepositoryProvider = Provider<FileRepository>((ref) {
   return FileRepositoryImpl(
     ref.watch(firestoreProvider),
     ref.watch(supabaseServiceProvider),
   );
 });
-
 final userSettingsRepositoryProvider = Provider<UserSettingsRepository>((ref) {
   return UserSettingsRepositoryImpl(ref.watch(firestoreProvider));
 });
-
 final sendMessageUseCaseProvider = Provider<SendMessageUseCase>((ref) {
   return SendMessageUseCase(
     ref.watch(conversationRepositoryProvider),
     ref.watch(userSettingsRepositoryProvider),
   );
 });
-
 final createArtifactUseCaseProvider = Provider<CreateArtifactUseCase>((ref) {
   return CreateArtifactUseCase(ref.watch(artifactRepositoryProvider));
 });

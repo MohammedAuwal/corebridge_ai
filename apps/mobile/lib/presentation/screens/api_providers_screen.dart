@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/ai_models.dart';
@@ -24,6 +25,7 @@ class _ProviderMeta {
 class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
   UserApiKeys _keys = const UserApiKeys();
   bool _isLoading = true;
+  String? _detectingProvider;
 
   static const _providers = [
     _ProviderMeta('claude', 'Anthropic (Claude)', Color(0xFFD97757), Icons.auto_awesome_rounded),
@@ -57,6 +59,49 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     if (mounted) setState(() => _keys = updated);
   }
 
+  /// Calls ai-router's listModels action with the freshly-saved key and
+  /// stores the best-ranked result as that provider's model override.
+  /// This is what makes "just pick Gemini" actually work regardless of
+  /// whether the user brought a free-tier key or a top-tier one — no
+  /// model string typed by anyone. Silent on failure: if detection
+  /// fails (bad key, network issue, provider outage), we simply leave
+  /// no override set, and modelFor() falls back to AiModels.defaultFor
+  /// as before. The user can still fix it manually via "Edit model" if
+  /// that fallback turns out wrong for their key.
+  Future<void> _autoDetectModel(String providerKey, String apiKey) async {
+    if (apiKey.trim().isEmpty) return;
+
+    setState(() => _detectingProvider = providerKey);
+    try {
+      final models = await ref.read(aiRouterClientProvider).listModels(
+            provider: providerKey,
+            apiKey: apiKey,
+          );
+
+      if (models.isEmpty) return;
+
+      final updated = _applyModel(providerKey, models.first);
+      await _save(updated);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Detected model for this key: ${models.first}')),
+        );
+      }
+    } catch (e) {
+      // Deliberately quiet — falls back to AiModels.defaultFor(provider).
+      // Surfacing a scary error here would be misleading since the key
+      // itself was saved successfully; only the auto-pick step failed.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't auto-detect a model for this key. Using the default — you can set one manually via \"Edit model\" if it doesn't work.")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _detectingProvider = null);
+    }
+  }
+
   Future<void> _showKeyDialog(_ProviderMeta provider, {bool isEdit = false}) async {
     final controller = TextEditingController(text: isEdit ? (_keyFor(provider.key) ?? '') : '');
 
@@ -85,13 +130,15 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     if (result != null && result.isNotEmpty) {
       final updated = _applyKey(provider.key, result);
       await _save(updated);
+      // Fire-and-forget from the UI's perspective — the key is already
+      // saved and usable via AiModels.defaultFor in the meantime.
+      unawaited(_autoDetectModel(provider.key, result));
     }
   }
 
-  /// Lets the user tell us exactly which model their own key talks to —
-  /// e.g. claude-opus-4-8, claude-haiku-4-5-20251001, or a specific GPT
-  /// or Gemini variant. Leave blank to use the current recommended
-  /// default instead.
+  /// Still available for power users who want to override what
+  /// auto-detection picked — e.g. they prefer a faster/cheaper model
+  /// than the "most capable" one we default to.
   Future<void> _showModelDialog(_ProviderMeta provider) async {
     final currentDefault = AiModels.defaultFor(provider.key);
     final controller = TextEditingController(text: _keys.modelFor(provider.key) == currentDefault ? '' : _keys.modelFor(provider.key));
@@ -106,7 +153,7 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Enter the exact model string your API key works with. Leave blank to use the current default ($currentDefault).',
+              'Enter the exact model string your API key works with. Leave blank to use auto-detection / the current default ($currentDefault).',
               style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -152,7 +199,11 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     );
 
     if (confirmed == true) {
-      final updated = _applyKey(provider.key, '');
+      // Clear both the key and any detected/manual model override —
+      // stale override with no key would be confusing state to leave
+      // behind.
+      final updated = _applyModel(provider.key, '');
+      await _save(_applyKey(provider.key, ''));
       await _save(updated);
     }
   }
@@ -201,7 +252,7 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
               padding: const EdgeInsets.all(20),
               children: [
                 Text(
-                  'Connect your AI provider API keys and, if you want, tell us exactly which model each key works with. Keys are stored privately on your account and sent only to that provider when you chat.',
+                  'Connect your AI provider API keys. We automatically detect which model works with your key — no need to know the exact version.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 20),
@@ -266,6 +317,7 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
 
   Widget _buildProviderTile(_ProviderMeta provider, {required bool isDefault}) {
     final resolvedModel = _keys.modelFor(provider.key);
+    final isDetecting = _detectingProvider == provider.key;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -302,33 +354,44 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
                     ],
                   ],
                 ),
-                Text('Model: $resolvedModel', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                if (isDetecting)
+                  const Text('Detecting your model…', style: TextStyle(color: AppColors.textMuted, fontSize: 12))
+                else
+                  Text('Model: $resolvedModel', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: Colors.greenAccent.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.circle, size: 6, color: Colors.greenAccent),
-                SizedBox(width: 4),
-                Text('Connected', style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.w600)),
-              ],
+          if (isDetecting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentBlue)),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(color: Colors.greenAccent.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.circle, size: 6, color: Colors.greenAccent),
+                  SizedBox(width: 4),
+                  Text('Connected', style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.w600)),
+                ],
+              ),
             ),
-          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded, color: AppColors.textMuted, size: 18),
             color: AppColors.surfaceRaised,
             onSelected: (value) {
               if (value == 'edit') _showKeyDialog(provider, isEdit: true);
               if (value == 'model') _showModelDialog(provider);
+              if (value == 'redetect') _autoDetectModel(provider.key, _keyFor(provider.key) ?? '');
               if (value == 'remove') _removeKey(provider);
             },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'edit', child: Text('Edit key')),
               PopupMenuItem(value: 'model', child: Text('Edit model')),
+              PopupMenuItem(value: 'redetect', child: Text('Re-detect model')),
               PopupMenuItem(value: 'remove', child: Text('Remove key')),
             ],
           ),
