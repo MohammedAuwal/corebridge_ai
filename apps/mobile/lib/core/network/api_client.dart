@@ -1,5 +1,3 @@
-
-//lib/core/network/api_client.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -28,8 +26,6 @@ class AiRouterClient {
       throw StateError('No authenticated Firebase user — cannot call ai-router.');
     }
 
-    // A fresh client per call — lets us force-close just this request on
-    // cancel, without tearing down anything else in flight.
     final localClient = HttpClient();
     var cancelledLocally = false;
     cancelToken?.onCancel(() {
@@ -46,6 +42,7 @@ class AiRouterClient {
       request.headers.set('Authorization', 'Bearer $idToken');
 
       final bodyBytes = utf8.encode(jsonEncode({
+        'action': 'complete',
         'provider': provider,
         'model': model,
         'messages': messages,
@@ -98,9 +95,6 @@ class AiRouterClient {
         }
       }
     } catch (e) {
-      // Cancellation force-closes the client, which surfaces as a
-      // socket/HTTP exception here — swallow it cleanly instead of
-      // propagating a scary error for what the user asked for.
       if (cancelledLocally || cancelToken?.isCancelled == true) return;
       rethrow;
     } finally {
@@ -108,9 +102,54 @@ class AiRouterClient {
     }
   }
 
-  /// No longer needed — each streamCompletion call owns and closes its
-  /// own HttpClient now, so there's nothing to dispose here. Kept as a
-  /// no-op so any existing call site to aiRouterClient.dispose() still
-  /// compiles.
+  /// Asks ai-router which models THIS key can actually use, ranked
+  /// best-first. Used right after a user connects a key, so the app can
+  /// auto-select a working model without the user typing anything.
+  /// Throws on failure — caller should catch and fall back gracefully
+  /// (e.g. leave the model override unset, which falls back to
+  /// AiModels.defaultFor).
+  Future<List<String>> listModels({
+    required String provider,
+    required String apiKey,
+  }) async {
+    if (supabaseFunctionsBaseUrl.trim().isEmpty) {
+      throw StateError('App was built without SUPABASE_FUNCTIONS_URL. Rebuild with the correct --dart-define.');
+    }
+
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      throw StateError('No authenticated Firebase user — cannot call ai-router.');
+    }
+
+    final idToken = await firebaseUser.getIdToken();
+    final uri = Uri.parse('$supabaseFunctionsBaseUrl/ai-router');
+
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(uri);
+      request.headers.contentType = ContentType('application', 'json', charset: 'utf-8');
+      request.headers.set('Authorization', 'Bearer $idToken');
+      request.add(utf8.encode(jsonEncode({
+        'action': 'listModels',
+        'provider': provider,
+        'apiKey': apiKey,
+      })));
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+
+      if (response.statusCode != 200) {
+        final decoded = jsonDecode(body) as Map<String, dynamic>;
+        throw HttpException(decoded['error'] as String? ?? 'listModels failed (${response.statusCode})');
+      }
+
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      final models = (decoded['models'] as List?)?.cast<String>() ?? const <String>[];
+      return models;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   void dispose() {}
 }
