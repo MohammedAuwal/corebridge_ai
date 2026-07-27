@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/selected_model_provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/di/providers.dart';
 import '../../core/providers/conversation_provider.dart';
