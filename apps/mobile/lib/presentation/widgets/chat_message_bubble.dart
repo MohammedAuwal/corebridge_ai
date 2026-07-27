@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -32,9 +33,6 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   @override
   void didUpdateWidget(covariant ChatMessageBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Auto-expand while actively thinking, auto-collapse the moment the
-    // real answer starts streaming — matches how thinking UIs elsewhere
-    // behave: visible while reasoning, tucked away once there's an answer.
     if (widget.message.isThinkingStreaming && !oldWidget.message.isThinkingStreaming) {
       _thinkingExpanded = true;
     } else if (!widget.message.isThinkingStreaming && widget.message.content.isNotEmpty && oldWidget.message.content.isEmpty) {
@@ -47,10 +45,62 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => ArtifactViewerSheet(
-        title: title,
-        content: code,
-        language: language,
+      builder: (context) => ArtifactViewerSheet(title: title, content: code, language: language),
+    );
+  }
+
+  void _openImageViewer(String base64Data) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              child: Image.memory(base64Decode(base64Data)),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: InkWell(
+                onTap: () => Navigator.of(dialogContext).pop(),
+                child: Container(
+                  decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                  padding: const EdgeInsets.all(6),
+                  child: const Icon(Icons.close_rounded, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageRow() {
+    if (widget.message.attachments.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: widget.message.attachments.map((image) {
+          return InkWell(
+            borderRadius: BorderRadius.circular(AppRadii.sm),
+            onTap: () => _openImageViewer(image.base64Data),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadii.sm),
+              child: Image.memory(
+                base64Decode(image.base64Data),
+                width: 96,
+                height: 96,
+                fit: BoxFit.cover,
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -78,11 +128,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                 child: Row(
                   children: [
                     if (widget.message.isThinkingStreaming)
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentBlue),
-                      )
+                      const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentBlue))
                     else
                       const Icon(Icons.psychology_outlined, size: 16, color: AppColors.accentBlue),
                     const SizedBox(width: 8),
@@ -91,11 +137,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                       style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                     const Spacer(),
-                    Icon(
-                      _thinkingExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                      size: 18,
-                      color: AppColors.textMuted,
-                    ),
+                    Icon(_thinkingExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 18, color: AppColors.textMuted),
                   ],
                 ),
               ),
@@ -103,10 +145,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
             if (_thinkingExpanded)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: Text(
-                  thinking,
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4, fontStyle: FontStyle.italic),
-                ),
+                child: Text(thinking, style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4, fontStyle: FontStyle.italic)),
               ),
           ],
         ),
@@ -125,9 +164,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
 
       if (match.start > lastEnd) {
         final plain = text.substring(lastEnd, match.start).trim();
-        if (plain.isNotEmpty) {
-          widgets.add(_buildMarkdownText(plain, isUser));
-        }
+        if (plain.isNotEmpty) widgets.add(_buildMarkdownText(plain, isUser));
       }
 
       final language = match.group(1)?.trim().isNotEmpty == true ? match.group(1)!.trim() : 'text';
@@ -151,29 +188,18 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
 
     if (lastEnd < text.length) {
       final plain = text.substring(lastEnd).trim();
-      if (plain.isNotEmpty) {
-        widgets.add(_buildMarkdownText(plain, isUser));
-      }
+      if (plain.isNotEmpty) widgets.add(_buildMarkdownText(plain, isUser));
     }
 
     if (!foundAnyFence && isUser) {
       final trimmed = text.trim();
       final lineCount = trimmed.isEmpty ? 0 : trimmed.split('\n').length;
       if (trimmed.length > _rawLengthThreshold || lineCount > _rawLineThreshold) {
-        return [
-          _buildArtifactCard(
-            title: 'Attachment',
-            language: 'text',
-            code: trimmed,
-            lineCount: lineCount,
-          ),
-        ];
+        return [_buildArtifactCard(title: 'Attachment', language: 'text', code: trimmed, lineCount: lineCount)];
       }
     }
 
-    if (widgets.isEmpty) {
-      widgets.add(_buildMarkdownText(text, isUser));
-    }
+    if (widgets.isEmpty && text.isNotEmpty) widgets.add(_buildMarkdownText(text, isUser));
 
     return widgets;
   }
@@ -185,20 +211,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         data: text,
         selectable: true,
         styleSheet: MarkdownStyleSheet(
-          p: TextStyle(
-            color: isUser ? Colors.white : (widget.isError ? Colors.redAccent.shade100 : AppColors.textPrimary),
-            fontSize: 15,
-            height: 1.4,
-          ),
-          strong: TextStyle(
-            color: isUser ? Colors.white : AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
-          code: const TextStyle(
-            backgroundColor: Colors.black26,
-            fontFamily: 'monospace',
-            fontSize: 13,
-          ),
+          p: TextStyle(color: isUser ? Colors.white : (widget.isError ? Colors.redAccent.shade100 : AppColors.textPrimary), fontSize: 15, height: 1.4),
+          strong: TextStyle(color: isUser ? Colors.white : AppColors.textPrimary, fontWeight: FontWeight.w700),
+          code: const TextStyle(backgroundColor: Colors.black26, fontFamily: 'monospace', fontSize: 13),
         ),
       ),
     );
@@ -209,27 +224,15 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       width: double.infinity,
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(AppRadii.sm),
-        border: Border.all(color: AppColors.border),
-      ),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(AppRadii.sm), border: Border.all(color: AppColors.border)),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        child: Text(
-          code,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: AppColors.textPrimary),
-        ),
+        child: Text(code, style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: AppColors.textPrimary)),
       ),
     );
   }
 
-  Widget _buildArtifactCard({
-    required String title,
-    required String language,
-    required String code,
-    required int lineCount,
-  }) {
+  Widget _buildArtifactCard({required String title, required String language, required String code, required int lineCount}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: InkWell(
@@ -238,20 +241,13 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceRaised,
-            borderRadius: BorderRadius.circular(AppRadii.md),
-            border: Border.all(color: AppColors.border),
-          ),
+          decoration: BoxDecoration(color: AppColors.surfaceRaised, borderRadius: BorderRadius.circular(AppRadii.md), border: Border.all(color: AppColors.border)),
           child: Row(
             children: [
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
-                  gradient: AppColors.brandGradient,
-                  borderRadius: BorderRadius.circular(AppRadii.sm),
-                ),
+                decoration: BoxDecoration(gradient: AppColors.brandGradient, borderRadius: BorderRadius.circular(AppRadii.sm)),
                 alignment: Alignment.center,
                 child: const Icon(Icons.code_rounded, color: Colors.white, size: 18),
               ),
@@ -260,17 +256,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title.isEmpty ? 'Code artifact' : title,
-                      style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Text(title.isEmpty ? 'Code artifact' : title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 2),
-                    Text(
-                      '$language · $lineCount lines',
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-                    ),
+                    Text('$language · $lineCount lines', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                   ],
                 ),
               ),
@@ -287,6 +275,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     final isUser = widget.message.role == MessageRole.user;
     final content = widget.message.content;
     final hasThinking = widget.message.thinking.isNotEmpty;
+    final hasImages = widget.message.attachments.isNotEmpty;
 
     if (content.isEmpty && !hasThinking && widget.message.isStreaming) {
       return Align(
@@ -294,16 +283,8 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 6),
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadii.lg),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentBlue),
-          ),
+          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(AppRadii.lg), border: Border.all(color: AppColors.border)),
+          child: const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentBlue)),
         ),
       );
     }
@@ -314,7 +295,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           if (!isUser && hasThinking) _buildThinkingSection(),
-          if (content.isNotEmpty || isUser)
+          if (content.isNotEmpty || isUser || hasImages)
             Container(
               margin: const EdgeInsets.symmetric(vertical: 6),
               padding: const EdgeInsets.all(14),
@@ -323,13 +304,22 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                 gradient: isUser ? AppColors.brandGradient : null,
                 color: isUser ? null : (widget.isError ? Colors.red.withValues(alpha: 0.12) : AppColors.surface),
                 borderRadius: BorderRadius.circular(AppRadii.lg),
-                border: isUser
-                    ? null
-                    : Border.all(color: widget.isError ? Colors.redAccent.withValues(alpha: 0.4) : AppColors.border),
+                border: isUser ? null : Border.all(color: widget.isError ? Colors.redAccent.withValues(alpha: 0.4) : AppColors.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: _buildMessageContent(content, context, isUser),
+                children: [
+                  if (hasImages) _buildImageRow(),
+                  ..._buildMessageContent(content, context, isUser),
+                  if (widget.message.wasStopped)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Stopped',
+                        style: TextStyle(color: (isUser ? Colors.white : AppColors.textMuted).withValues(alpha: 0.7), fontSize: 12, fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                ],
               ),
             ),
           if (!isUser && !widget.message.isStreaming && !widget.isError && content.isNotEmpty)
@@ -341,13 +331,10 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                     icon: Icons.copy_rounded,
                     onTap: () {
                       Clipboard.setData(ClipboardData(text: content));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)),
-                      );
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)));
                     },
                   ),
-                  if (widget.onRewrite != null)
-                    _MiniIconButton(icon: Icons.refresh_rounded, onTap: widget.onRewrite!),
+                  if (widget.onRewrite != null) _MiniIconButton(icon: Icons.refresh_rounded, onTap: widget.onRewrite!),
                 ],
               ),
             ),
@@ -360,7 +347,6 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
 class _MiniIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-
   const _MiniIconButton({required this.icon, required this.onTap});
 
   @override
@@ -368,10 +354,7 @@ class _MiniIconButton extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: Icon(icon, size: 16, color: AppColors.textMuted),
-      ),
+      child: Padding(padding: const EdgeInsets.all(6), child: Icon(icon, size: 16, color: AppColors.textMuted)),
     );
   }
 }

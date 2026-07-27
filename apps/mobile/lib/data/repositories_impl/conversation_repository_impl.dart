@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/error/failures.dart';
 import '../../core/network/api_client.dart';
+import '../../core/utils/cancel_token.dart';
 import '../../domain/entities/ai_stream_event.dart';
+import '../../domain/entities/chat_attachment.dart';
 import '../../domain/entities/conversation_entity.dart';
 import '../../domain/entities/message_entity.dart';
 import '../../domain/repositories/conversation_repository.dart';
@@ -112,16 +114,42 @@ class ConversationRepositoryImpl implements ConversationRepository {
     required String conversationId,
     required String provider,
     required String model,
-    required List<Map<String, String>> messages,
+    required List<Map<String, String>> history,
+    required String userMessage,
+    required List<ChatAttachment> attachments,
     required String apiKey,
     bool thinkingEnabled = false,
+    CancelToken? cancelToken,
   }) {
+    final List<Map<String, dynamic>> messages = [
+      ...history,
+      _buildUserTurn(userMessage, attachments),
+    ];
+
     return _aiRouter.streamCompletion(
       provider: provider,
       model: model,
       messages: messages,
       apiKey: apiKey,
       thinkingEnabled: thinkingEnabled,
+      cancelToken: cancelToken,
     );
+  }
+
+  Map<String, dynamic> _buildUserTurn(String text, List<ChatAttachment> attachments) {
+    if (attachments.isEmpty) {
+      return {'role': 'user', 'content': text};
+    }
+
+    final parts = <Map<String, dynamic>>[
+      if (text.trim().isNotEmpty) {'type': 'text', 'text': text},
+      ...attachments.map((a) => {
+            'type': 'image',
+            'mimeType': a.mimeType,
+            'data': a.base64Data,
+          }),
+    ];
+
+    return {'role': 'user', 'content': parts};
   }
 }

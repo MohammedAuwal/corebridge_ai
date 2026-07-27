@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/di/providers.dart';
 import '../../core/providers/conversation_provider.dart';
-import '../../core/providers/draft_message_provider.dart';
 import '../widgets/geo_mesh_background.dart';
 import '../widgets/chat_composer.dart';
 import '../widgets/model_selector_bar.dart';
@@ -44,7 +43,10 @@ class HomeScreen extends ConsumerWidget {
               const Spacer(),
               ChatComposer(
                 isSending: false,
-                onSend: (text) {
+                // Home hands off to Chat before generation starts — image
+                // attachments picked here still carry through since Chat
+                // reads them once it opens via the draft flow below.
+                onSend: (text, attachments) {
                   ref.read(activeConversationIdProvider.notifier).state = null;
                   ref.read(draftMessageProvider.notifier).state = text;
                   context.go('/chat');

@@ -4,7 +4,9 @@ import '../../core/di/providers.dart';
 import '../../core/providers/conversation_provider.dart';
 import '../../core/providers/selected_model_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/cancel_token.dart';
 import '../../domain/entities/ai_stream_event.dart';
+import '../../domain/entities/chat_attachment.dart';
 import '../../domain/entities/message_entity.dart';
 import '../widgets/geo_mesh_background.dart';
 import '../widgets/chat_composer.dart';
@@ -25,6 +27,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _isLoadingHistory = false;
   String? _conversationId;
   Future<void>? _conversationCreation;
+  CancelToken? _activeCancelToken;
 
   @override
   void initState() {
@@ -38,17 +41,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final draft = ref.read(draftMessageProvider);
     if (draft.trim().isNotEmpty) {
       ref.read(draftMessageProvider.notifier).state = '';
-      WidgetsBinding.instance.addPostFrameCallback((_) => _send(draft));
+      WidgetsBinding.instance.addPostFrameCallback((_) => _send(draft, []));
     }
   }
 
   Future<void> _loadExistingConversation(String conversationId) async {
     setState(() => _isLoadingHistory = true);
     try {
-      final messages = await ref
-          .read(conversationRepositoryProvider)
-          .watchMessages(conversationId)
-          .first;
+      final messages = await ref.read(conversationRepositoryProvider).watchMessages(conversationId).first;
       if (mounted) {
         setState(() {
           _messages.clear();
@@ -66,8 +66,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return '${oneLine.substring(0, 48).trim()}…';
   }
 
-  Future<void> _send(String text) async {
-    if (text.trim().isEmpty || _isSending) return;
+  Future<void> _send(String text, List<ChatAttachment> attachments) async {
+    if (text.trim().isEmpty && attachments.isEmpty) return;
+    if (_isSending) return;
 
     final uid = ref.read(firebaseServiceProvider).currentUserId;
     if (uid == null) return;
@@ -81,7 +82,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       } else {
         _conversationCreation = ref.read(conversationRepositoryProvider).createConversation(
               ownerId: uid,
-              title: _titleFrom(text),
+              title: _titleFrom(text.isEmpty ? 'Image' : text),
             ).then((result) {
           result.when(
             success: (conversation) {
@@ -106,6 +107,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         conversationId: _conversationId!,
         role: MessageRole.user,
         content: text,
+        attachments: attachments,
         createdAt: DateTime.now(),
       ));
     });
@@ -126,6 +128,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         .where((m) => m.id != placeholderId && m.id != userMessageId && !_errorMessageIds.contains(m.id))
         .toList();
 
+    final cancelToken = CancelToken();
+    _activeCancelToken = cancelToken;
+
     final sendMessageUseCase = ref.read(sendMessageUseCaseProvider);
 
     try {
@@ -136,7 +141,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         history: cleanHistory,
         provider: selectedModel.provider,
         model: selectedModel.model,
+        attachments: attachments,
         thinkingEnabled: thinkingEnabled,
+        cancelToken: cancelToken,
       )) {
         final index = _messages.indexWhere((m) => m.id == placeholderId);
         if (index == -1) continue;
@@ -168,13 +175,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     } finally {
       final index = _messages.indexWhere((m) => m.id == placeholderId);
-      if (index != -1 && !_errorMessageIds.contains(placeholderId)) {
+      if (index != -1) {
         setState(() {
-          _messages[index] = _messages[index].copyWith(isStreaming: false, isThinkingStreaming: false);
+          _messages[index] = _messages[index].copyWith(
+            isStreaming: false,
+            isThinkingStreaming: false,
+            wasStopped: cancelToken.isCancelled && !_errorMessageIds.contains(placeholderId),
+          );
         });
       }
+      _activeCancelToken = null;
       setState(() => _isSending = false);
     }
+  }
+
+  void _stopGenerating() {
+    _activeCancelToken?.cancel();
   }
 
   void _rewrite(MessageEntity assistantMessage) {
@@ -188,7 +204,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _messages.removeRange(index - 1, _messages.length);
     });
 
-    _send(userMessage.content);
+    _send(userMessage.content, userMessage.attachments);
   }
 
   String _friendlyError(Object e) {
@@ -196,10 +212,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (msg.contains('No API key set') || msg.contains('No API key provided')) {
       return 'No API key set for this provider. Open the menu → API Providers to add one.';
     }
-    return msg
-        .replaceFirst('Exception: ', '')
-        .replaceFirst('StateError: ', '')
-        .replaceFirst('HttpException: ', '');
+    return msg.replaceFirst('Exception: ', '').replaceFirst('StateError: ', '').replaceFirst('HttpException: ', '');
+  }
+
+  @override
+  void dispose() {
+    _activeCancelToken?.cancel();
+    super.dispose();
   }
 
   @override
@@ -236,6 +255,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ChatComposer(
                 onSend: _send,
                 isSending: _isSending,
+                onStop: _stopGenerating,
               ),
             ],
           ),
@@ -263,11 +283,7 @@ class _EmptyChatState extends StatelessWidget {
             const SizedBox(height: 16),
             Text('Start a conversation', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 6),
-            Text(
-              'Ask anything, or pick a model above to get started.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            Text('Ask anything, attach an image, or pick a model above to get started.', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
       ),

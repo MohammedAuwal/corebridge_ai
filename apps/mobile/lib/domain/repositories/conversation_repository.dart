@@ -1,5 +1,7 @@
 import '../../core/error/failures.dart';
+import '../../core/utils/cancel_token.dart';
 import '../entities/ai_stream_event.dart';
+import '../entities/chat_attachment.dart';
 import '../entities/conversation_entity.dart';
 import '../entities/message_entity.dart';
 
@@ -21,8 +23,11 @@ abstract class ConversationRepository {
     required String conversationId,
     required String provider,
     required String model,
-    required List<Map<String, String>> messages,
+    required List<Map<String, String>> history,
+    required String userMessage,
+    required List<ChatAttachment> attachments,
     required String apiKey,
     bool thinkingEnabled,
+    CancelToken? cancelToken,
   });
 }
