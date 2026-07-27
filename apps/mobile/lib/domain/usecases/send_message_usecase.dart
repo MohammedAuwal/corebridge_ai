@@ -1,3 +1,4 @@
+import '../../core/constants/ai_models.dart';
 import '../../core/utils/cancel_token.dart';
 import '../entities/ai_stream_event.dart';
 import '../entities/chat_attachment.dart';
@@ -17,7 +18,6 @@ class SendMessageUseCase {
     required String userMessage,
     required List<MessageEntity> history,
     required String provider,
-    required String model,
     List<ChatAttachment> attachments = const [],
     bool thinkingEnabled = false,
     CancelToken? cancelToken,
@@ -28,6 +28,14 @@ class SendMessageUseCase {
     if (apiKey == null || apiKey.trim().isEmpty) {
       throw StateError('No API key set for $provider. Add one in Settings → AI Providers.');
     }
+
+    // The model string is entirely user-owned — whatever they typed in
+    // Settings, or today's recommended default if they left it blank.
+    // We never hardcode a specific version in the picker: one user's
+    // key might only work with Sonnet 4.6, another's with Opus 4.8, and
+    // the app has no way to know which without the user telling it.
+    final baseModel = apiKeys.modelFor(provider);
+    final model = attachments.isEmpty ? baseModel : AiModels.visionModelFor(provider, baseModel);
 
     await _conversationRepository.appendMessage(
       conversationId: conversationId,

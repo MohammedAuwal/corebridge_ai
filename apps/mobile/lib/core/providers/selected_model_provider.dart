@@ -1,16 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../constants/ai_models.dart';
 
+/// A provider option in the UI picker. Deliberately has NO model field —
+/// the picker only ever selects a brand (Claude / ChatGPT / Gemini /
+/// Qwen). The actual model string is resolved per-user at send time
+/// from UserApiKeys.modelFor(provider), since different users' API
+/// keys work with different model versions and we can't know which.
 class AiModelOption {
   final String provider;
-  final String model;
   final String label;
   final bool supportsThinking;
   final bool supportsVision;
-
   const AiModelOption({
     required this.provider,
-    required this.model,
     required this.label,
     this.supportsThinking = false,
     this.supportsVision = false,
@@ -18,13 +19,10 @@ class AiModelOption {
 }
 
 final availableModels = <AiModelOption>[
-  AiModelOption(provider: 'claude', model: AiModels.claudeDefault, label: 'Claude Sonnet 5', supportsThinking: true, supportsVision: true),
-  AiModelOption(provider: 'openai', model: AiModels.openAiDefault, label: 'GPT-5.6', supportsThinking: false, supportsVision: true),
-  AiModelOption(provider: 'gemini', model: AiModels.geminiDefault, label: 'Gemini 3.1 Pro', supportsThinking: true, supportsVision: true),
-  // Qwen3.7 Max itself is text-only — the checkbox here reflects that an
-  // image will get silently rerouted to AiModels.qwenVision instead, not
-  // that this exact model string handles images.
-  AiModelOption(provider: 'qwen', model: AiModels.qwenDefault, label: 'Qwen3.7 Max', supportsThinking: true, supportsVision: true),
+  AiModelOption(provider: 'claude', label: 'Claude', supportsThinking: true, supportsVision: true),
+  AiModelOption(provider: 'openai', label: 'ChatGPT', supportsThinking: false, supportsVision: true),
+  AiModelOption(provider: 'gemini', label: 'Gemini', supportsThinking: true, supportsVision: true),
+  AiModelOption(provider: 'qwen', label: 'Qwen', supportsThinking: true, supportsVision: true),
 ];
 
 final selectedModelProvider = StateProvider<AiModelOption>((ref) => availableModels.first);

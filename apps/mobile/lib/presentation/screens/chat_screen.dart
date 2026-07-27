@@ -140,7 +140,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         userMessage: text,
         history: cleanHistory,
         provider: selectedModel.provider,
-        model: selectedModel.model,
         attachments: attachments,
         thinkingEnabled: thinkingEnabled,
         cancelToken: cancelToken,

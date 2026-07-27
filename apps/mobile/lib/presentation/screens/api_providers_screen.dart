@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/constants/ai_models.dart';
 import '../../core/di/providers.dart';
 import '../../core/providers/selected_model_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -15,10 +16,9 @@ class ApiProvidersScreen extends ConsumerStatefulWidget {
 class _ProviderMeta {
   final String key;
   final String name;
-  final String modelLabel;
   final Color color;
   final IconData icon;
-  const _ProviderMeta(this.key, this.name, this.modelLabel, this.color, this.icon);
+  const _ProviderMeta(this.key, this.name, this.color, this.icon);
 }
 
 class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
@@ -26,10 +26,10 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
   bool _isLoading = true;
 
   static const _providers = [
-    _ProviderMeta('claude', 'Anthropic (Claude)', 'claude-sonnet-5', Color(0xFFD97757), Icons.auto_awesome_rounded),
-    _ProviderMeta('openai', 'OpenAI', 'gpt-5.6-sol', Color(0xFF10A37F), Icons.bubble_chart_rounded),
-    _ProviderMeta('gemini', 'Google Gemini', 'gemini-3.1-pro', Color(0xFF4285F4), Icons.diamond_rounded),
-    _ProviderMeta('qwen', 'Qwen (Alibaba)', 'qwen3.7-max', Color(0xFF6236FF), Icons.hub_rounded),
+    _ProviderMeta('claude', 'Anthropic (Claude)', Color(0xFFD97757), Icons.auto_awesome_rounded),
+    _ProviderMeta('openai', 'OpenAI', Color(0xFF10A37F), Icons.bubble_chart_rounded),
+    _ProviderMeta('gemini', 'Google Gemini', Color(0xFF4285F4), Icons.diamond_rounded),
+    _ProviderMeta('qwen', 'Qwen (Alibaba)', Color(0xFF6236FF), Icons.hub_rounded),
   ];
 
   @override
@@ -83,7 +83,53 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     );
 
     if (result != null && result.isNotEmpty) {
-      final updated = _updateKeys(provider.key, result);
+      final updated = _applyKey(provider.key, result);
+      await _save(updated);
+    }
+  }
+
+  /// Lets the user tell us exactly which model their own key talks to —
+  /// e.g. claude-opus-4-8, claude-haiku-4-5-20251001, or a specific GPT
+  /// or Gemini variant. Leave blank to use the current recommended
+  /// default instead.
+  Future<void> _showModelDialog(_ProviderMeta provider) async {
+    final currentDefault = AiModels.defaultFor(provider.key);
+    final controller = TextEditingController(text: _keys.modelFor(provider.key) == currentDefault ? '' : _keys.modelFor(provider.key));
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surfaceRaised,
+        title: Text('${provider.name} model'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enter the exact model string your API key works with. Leave blank to use the current default ($currentDefault).',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: const TextStyle(color: AppColors.textPrimary),
+              decoration: InputDecoration(hintText: currentDefault),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      final updated = _applyModel(provider.key, result);
       await _save(updated);
     }
   }
@@ -106,18 +152,39 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     );
 
     if (confirmed == true) {
-      final updated = _updateKeys(provider.key, '');
+      final updated = _applyKey(provider.key, '');
       await _save(updated);
     }
   }
 
-  UserApiKeys _updateKeys(String providerKey, String value) {
-    return UserApiKeys(
-      claude: providerKey == 'claude' ? value : _keys.claude,
-      openai: providerKey == 'openai' ? value : _keys.openai,
-      gemini: providerKey == 'gemini' ? value : _keys.gemini,
-      qwen: providerKey == 'qwen' ? value : _keys.qwen,
-    );
+  UserApiKeys _applyKey(String providerKey, String value) {
+    switch (providerKey) {
+      case 'claude':
+        return _keys.copyWith(claude: value);
+      case 'openai':
+        return _keys.copyWith(openai: value);
+      case 'gemini':
+        return _keys.copyWith(gemini: value);
+      case 'qwen':
+        return _keys.copyWith(qwen: value);
+      default:
+        return _keys;
+    }
+  }
+
+  UserApiKeys _applyModel(String providerKey, String value) {
+    switch (providerKey) {
+      case 'claude':
+        return _keys.copyWith(claudeModel: value);
+      case 'openai':
+        return _keys.copyWith(openaiModel: value);
+      case 'gemini':
+        return _keys.copyWith(geminiModel: value);
+      case 'qwen':
+        return _keys.copyWith(qwenModel: value);
+      default:
+        return _keys;
+    }
   }
 
   @override
@@ -134,7 +201,7 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
               padding: const EdgeInsets.all(20),
               children: [
                 Text(
-                  'Connect and manage your AI provider API keys. Keys are stored privately on your account and sent only to that provider when you chat.',
+                  'Connect your AI provider API keys and, if you want, tell us exactly which model each key works with. Keys are stored privately on your account and sent only to that provider when you chat.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 20),
@@ -198,6 +265,8 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
   }
 
   Widget _buildProviderTile(_ProviderMeta provider, {required bool isDefault}) {
+    final resolvedModel = _keys.modelFor(provider.key);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -233,7 +302,7 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
                     ],
                   ],
                 ),
-                Text('Model: ${provider.modelLabel}', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                Text('Model: $resolvedModel', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
           ),
@@ -254,10 +323,12 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
             color: AppColors.surfaceRaised,
             onSelected: (value) {
               if (value == 'edit') _showKeyDialog(provider, isEdit: true);
+              if (value == 'model') _showModelDialog(provider);
               if (value == 'remove') _removeKey(provider);
             },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'edit', child: Text('Edit key')),
+              PopupMenuItem(value: 'model', child: Text('Edit model')),
               PopupMenuItem(value: 'remove', child: Text('Remove key')),
             ],
           ),
