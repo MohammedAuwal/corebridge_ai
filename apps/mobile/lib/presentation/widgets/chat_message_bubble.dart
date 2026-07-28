@@ -78,6 +78,13 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
+  void _copyCode(String code) {
+    Clipboard.setData(ClipboardData(text: code));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Code copied'), duration: Duration(seconds: 1)),
+    );
+  }
+
   Widget _buildImageRow() {
     if (widget.message.attachments.isEmpty) return const SizedBox.shrink();
 
@@ -219,15 +226,37 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
+  /// Short code blocks (≤8 lines) — rendered inline with their own copy
+  /// button in the top-right corner, so a user can grab just the
+  /// commands (e.g. git add / commit / push) without selecting or
+  /// copying the surrounding explanation text.
   Widget _buildInlineCode(String code, String language, bool isUser) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       width: double.infinity,
-      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(AppRadii.sm), border: Border.all(color: AppColors.border)),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Text(code, style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: AppColors.textPrimary)),
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 40, 10),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Text(code, style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: AppColors.textPrimary)),
+            ),
+          ),
+          Positioned(
+            top: 2,
+            right: 2,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => _copyCode(code),
+              child: const Padding(
+                padding: EdgeInsets.all(6),
+                child: Icon(Icons.copy_rounded, size: 15, color: AppColors.textMuted),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -235,35 +264,46 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   Widget _buildArtifactCard({required String title, required String language, required String code, required int lineCount}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        onTap: () => _openArtifact(title.isEmpty ? 'Untitled snippet' : title, code, language),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: AppColors.surfaceRaised, borderRadius: BorderRadius.circular(AppRadii.md), border: Border.all(color: AppColors.border)),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(gradient: AppColors.brandGradient, borderRadius: BorderRadius.circular(AppRadii.sm)),
-                alignment: Alignment.center,
-                child: const Icon(Icons.code_rounded, color: Colors.white, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title.isEmpty ? 'Code artifact' : title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Text('$language · $lineCount lines', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                  ],
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(color: AppColors.surfaceRaised, borderRadius: BorderRadius.circular(AppRadii.md), border: Border.all(color: AppColors.border)),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          onTap: () => _openArtifact(title.isEmpty ? 'Untitled snippet' : title, code, language),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(gradient: AppColors.brandGradient, borderRadius: BorderRadius.circular(AppRadii.sm)),
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.code_rounded, color: Colors.white, size: 18),
                 ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-            ],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title.isEmpty ? 'Code artifact' : title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text('$language · $lineCount lines', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _copyCode(code),
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(Icons.copy_rounded, size: 16, color: AppColors.textMuted),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+              ],
+            ),
           ),
         ),
       ),
