@@ -4,10 +4,15 @@ import '../../core/constants/ai_models.dart';
 ///
 /// The model fields are the whole point of "bring your own model": a
 /// user's Claude key might only work with claude-sonnet-5, another
-/// user's with claude-opus-4-8 or claude-haiku-4-5-20251001. We never
-/// hardcode a version in the app — whatever the user types here (or
-/// leaves blank, falling back to AiModels.defaultFor) is what actually
-/// gets sent to ai-router.
+/// user's with claude-opus-4-8. We never hardcode a version in the app
+/// — whatever gets auto-detected for the user's own key (or what they
+/// type manually, or today's recommended default as a last resort) is
+/// what actually gets sent to ai-router.
+///
+/// qwenVisionModel is separate from qwenModel because Qwen's chat-tier
+/// models (e.g. qwen3.7-max) and vision-capable models (the "-vl-"
+/// line) are often different model ids on Alibaba's side — a message
+/// with an image attached needs the vision one specifically.
 class UserApiKeys {
   final String? claude;
   final String? openai;
@@ -19,6 +24,8 @@ class UserApiKeys {
   final String? geminiModel;
   final String? qwenModel;
 
+  final String? qwenVisionModel;
+
   const UserApiKeys({
     this.claude,
     this.openai,
@@ -28,6 +35,7 @@ class UserApiKeys {
     this.openaiModel,
     this.geminiModel,
     this.qwenModel,
+    this.qwenVisionModel,
   });
 
   factory UserApiKeys.fromMap(Map<String, dynamic>? map) {
@@ -41,6 +49,7 @@ class UserApiKeys {
       openaiModel: map['openaiModel'] as String?,
       geminiModel: map['geminiModel'] as String?,
       qwenModel: map['qwenModel'] as String?,
+      qwenVisionModel: map['qwenVisionModel'] as String?,
     );
   }
 
@@ -54,6 +63,7 @@ class UserApiKeys {
       if (openaiModel != null) 'openaiModel': openaiModel,
       if (geminiModel != null) 'geminiModel': geminiModel,
       if (qwenModel != null) 'qwenModel': qwenModel,
+      if (qwenVisionModel != null) 'qwenVisionModel': qwenVisionModel,
     };
   }
 
@@ -73,10 +83,23 @@ class UserApiKeys {
   }
 
   /// The model string to actually send to ai-router for [provider].
-  /// User's own override if they set one (non-empty), otherwise the
-  /// current recommended default. This is the single source of truth
-  /// for "which model" — the UI picker only ever selects a provider.
-  String modelFor(String provider) {
+  ///
+  /// hasImages: when true and provider is 'qwen', resolves to the
+  /// user's detected vision-capable model instead of their regular
+  /// chat model override — Qwen's chat and vision model ids are often
+  /// different, unlike Claude/OpenAI/Gemini where the default chat
+  /// model already handles images.
+  String modelFor(String provider, {bool hasImages = false}) {
+    if (hasImages && provider == 'qwen') {
+      final visionOverride = qwenVisionModel?.trim();
+      if (visionOverride != null && visionOverride.isNotEmpty) return visionOverride;
+      // No vision model detected yet for this key (e.g. key was
+      // connected before this feature existed, or detection failed).
+      // Falls back to the flagged-as-unverified constant as a last
+      // resort rather than failing outright.
+      return AiModels.qwenVision;
+    }
+
     final override = _modelOverrideFor(provider)?.trim();
     if (override != null && override.isNotEmpty) return override;
     return AiModels.defaultFor(provider);
@@ -106,6 +129,7 @@ class UserApiKeys {
     String? openaiModel,
     String? geminiModel,
     String? qwenModel,
+    String? qwenVisionModel,
   }) {
     return UserApiKeys(
       claude: claude ?? this.claude,
@@ -116,6 +140,7 @@ class UserApiKeys {
       openaiModel: openaiModel ?? this.openaiModel,
       geminiModel: geminiModel ?? this.geminiModel,
       qwenModel: qwenModel ?? this.qwenModel,
+      qwenVisionModel: qwenVisionModel ?? this.qwenVisionModel,
     );
   }
 }

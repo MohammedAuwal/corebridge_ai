@@ -1,4 +1,3 @@
-import '../../core/constants/ai_models.dart';
 import '../../core/utils/cancel_token.dart';
 import '../entities/ai_stream_event.dart';
 import '../entities/chat_attachment.dart';
@@ -29,13 +28,11 @@ class SendMessageUseCase {
       throw StateError('No API key set for $provider. Add one in Settings → AI Providers.');
     }
 
-    // The model string is entirely user-owned — whatever they typed in
-    // Settings, or today's recommended default if they left it blank.
-    // We never hardcode a specific version in the picker: one user's
-    // key might only work with Sonnet 4.6, another's with Opus 4.8, and
-    // the app has no way to know which without the user telling it.
-    final baseModel = apiKeys.modelFor(provider);
-    final model = attachments.isEmpty ? baseModel : AiModels.visionModelFor(provider, baseModel);
+    // Model resolution is entirely user-owned. For providers other than
+    // Qwen, the same model handles text and images. For Qwen, images
+    // route to the user's detected vision-capable model instead — see
+    // UserApiKeys.modelFor for why.
+    final model = apiKeys.modelFor(provider, hasImages: attachments.isNotEmpty);
 
     await _conversationRepository.appendMessage(
       conversationId: conversationId,
@@ -63,9 +60,6 @@ class SendMessageUseCase {
       yield event;
     }
 
-    // Whatever was received — full or partial (if the user hit stop) —
-    // gets saved. A cancelled stream returns cleanly rather than
-    // throwing, so this line always runs.
     if (contentBuffer.isNotEmpty) {
       await _conversationRepository.appendMessage(
         conversationId: conversationId,

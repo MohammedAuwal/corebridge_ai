@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/ai_models.dart';
@@ -59,47 +58,61 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     if (mounted) setState(() => _keys = updated);
   }
 
-  /// Calls ai-router's listModels action with the freshly-saved key and
-  /// stores the best-ranked result as that provider's model override.
-  /// This is what makes "just pick Gemini" actually work regardless of
-  /// whether the user brought a free-tier key or a top-tier one — no
-  /// model string typed by anyone. Silent on failure: if detection
-  /// fails (bad key, network issue, provider outage), we simply leave
-  /// no override set, and modelFor() falls back to AiModels.defaultFor
-  /// as before. The user can still fix it manually via "Edit model" if
-  /// that fallback turns out wrong for their key.
+  /// Detects a working CHAT model for the key, and — for Qwen only — a
+  /// separate VISION-capable model too, since Qwen's chat and vision
+  /// model ids differ. Silent on failure per field: if chat detection
+  /// works but vision detection doesn't (or vice versa), whichever one
+  /// succeeded still gets saved.
   Future<void> _autoDetectModel(String providerKey, String apiKey) async {
     if (apiKey.trim().isEmpty) return;
 
     setState(() => _detectingProvider = providerKey);
+    var updated = _keys;
+    final messages = <String>[];
+
     try {
-      final models = await ref.read(aiRouterClientProvider).listModels(
+      final chatModels = await ref.read(aiRouterClientProvider).listModels(
             provider: providerKey,
             apiKey: apiKey,
           );
-
-      if (models.isEmpty) return;
-
-      final updated = _applyModel(providerKey, models.first);
-      await _save(updated);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Detected model for this key: ${models.first}')),
-        );
+      if (chatModels.isNotEmpty) {
+        updated = _applyModel(providerKey, chatModels.first);
+        messages.add('model: ${chatModels.first}');
       }
-    } catch (e) {
-      // Deliberately quiet — falls back to AiModels.defaultFor(provider).
-      // Surfacing a scary error here would be misleading since the key
-      // itself was saved successfully; only the auto-pick step failed.
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Couldn't auto-detect a model for this key. Using the default — you can set one manually via \"Edit model\" if it doesn't work.")),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _detectingProvider = null);
+    } catch (_) {
+      // Falls back to AiModels.defaultFor — handled by UserApiKeys.modelFor.
     }
+
+    if (providerKey == 'qwen') {
+      try {
+        final visionModels = await ref.read(aiRouterClientProvider).listModels(
+              provider: providerKey,
+              apiKey: apiKey,
+              capability: 'vision',
+            );
+        if (visionModels.isNotEmpty) {
+          updated = updated.copyWith(qwenVisionModel: visionModels.first);
+          messages.add('vision: ${visionModels.first}');
+        }
+      } catch (_) {
+        // Falls back to AiModels.qwenVision — handled by UserApiKeys.modelFor.
+      }
+    }
+
+    if (messages.isNotEmpty) {
+      await _save(updated);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Detected ${messages.join(', ')}')),
+        );
+      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't auto-detect a model for this key. Using the default — you can set one manually via \"Edit model\" if it doesn't work.")),
+      );
+    }
+
+    if (mounted) setState(() => _detectingProvider = null);
   }
 
   Future<void> _showKeyDialog(_ProviderMeta provider, {bool isEdit = false}) async {
@@ -130,15 +143,10 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     if (result != null && result.isNotEmpty) {
       final updated = _applyKey(provider.key, result);
       await _save(updated);
-      // Fire-and-forget from the UI's perspective — the key is already
-      // saved and usable via AiModels.defaultFor in the meantime.
-      unawaited(_autoDetectModel(provider.key, result));
+      await _autoDetectModel(provider.key, result);
     }
   }
 
-  /// Still available for power users who want to override what
-  /// auto-detection picked — e.g. they prefer a faster/cheaper model
-  /// than the "most capable" one we default to.
   Future<void> _showModelDialog(_ProviderMeta provider) async {
     final currentDefault = AiModels.defaultFor(provider.key);
     final controller = TextEditingController(text: _keys.modelFor(provider.key) == currentDefault ? '' : _keys.modelFor(provider.key));
@@ -199,11 +207,11 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     );
 
     if (confirmed == true) {
-      // Clear both the key and any detected/manual model override —
-      // stale override with no key would be confusing state to leave
-      // behind.
-      final updated = _applyModel(provider.key, '');
-      await _save(_applyKey(provider.key, ''));
+      var updated = _applyKey(provider.key, '');
+      updated = _applyModel(provider.key, '');
+      if (provider.key == 'qwen') {
+        updated = updated.copyWith(qwenVisionModel: '');
+      }
       await _save(updated);
     }
   }
@@ -318,6 +326,8 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
   Widget _buildProviderTile(_ProviderMeta provider, {required bool isDefault}) {
     final resolvedModel = _keys.modelFor(provider.key);
     final isDetecting = _detectingProvider == provider.key;
+    final isQwen = provider.key == 'qwen';
+    final resolvedVisionModel = isQwen ? _keys.modelFor(provider.key, hasImages: true) : null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -328,6 +338,7 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
         border: Border.all(color: AppColors.border),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 40,
@@ -356,8 +367,11 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
                 ),
                 if (isDetecting)
                   const Text('Detecting your model…', style: TextStyle(color: AppColors.textMuted, fontSize: 12))
-                else
+                else ...[
                   Text('Model: $resolvedModel', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                  if (isQwen && resolvedVisionModel != null)
+                    Text('Vision: $resolvedVisionModel', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                ],
               ],
             ),
           ),

@@ -103,14 +103,15 @@ class AiRouterClient {
   }
 
   /// Asks ai-router which models THIS key can actually use, ranked
-  /// best-first. Used right after a user connects a key, so the app can
-  /// auto-select a working model without the user typing anything.
-  /// Throws on failure — caller should catch and fall back gracefully
-  /// (e.g. leave the model override unset, which falls back to
-  /// AiModels.defaultFor).
+  /// best-first. `capability` selects 'chat' (default) or 'vision' —
+  /// only Qwen currently returns a different list for 'vision', since
+  /// its vision-capable models are separate ids from its regular chat
+  /// models (unlike Claude/OpenAI/Gemini, where the default already
+  /// handles images).
   Future<List<String>> listModels({
     required String provider,
     required String apiKey,
+    String capability = 'chat',
   }) async {
     if (supabaseFunctionsBaseUrl.trim().isEmpty) {
       throw StateError('App was built without SUPABASE_FUNCTIONS_URL. Rebuild with the correct --dart-define.');
@@ -133,6 +134,7 @@ class AiRouterClient {
         'action': 'listModels',
         'provider': provider,
         'apiKey': apiKey,
+        'capability': capability,
       })));
 
       final response = await request.close();
