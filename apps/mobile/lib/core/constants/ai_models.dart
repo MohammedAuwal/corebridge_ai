@@ -1,4 +1,4 @@
-/// Central place for default AI model strings — used ONLY as a fallback
+  /// Central place for default AI model strings — used ONLY as a fallback
 /// when a user hasn't connected a key yet (so the picker has something
 /// to show) or when auto-detection fails outright. Once a key is
 /// connected, ai-router's listModels action detects a real working
@@ -44,6 +44,25 @@ class AiModels {
         return qwenDefault;
       default:
         throw ArgumentError('Unknown provider: $provider');
+    }
+  }
+
+  /// Returns the vision-capable model for a given provider.
+  /// If the provider's default model already supports vision, it returns that.
+  /// Otherwise, it swaps to a known vision model (e.g., Qwen VL).
+  static String visionModelFor(String provider, String fallbackModel) {
+    switch (provider) {
+      case 'qwen':
+        // Qwen's default (qwen3.7-max) is text-only, so we must swap to VL
+        return qwenVision;
+      case 'claude':
+      case 'openai':
+      case 'gemini':
+        // The default models for these providers already support vision
+        return defaultFor(provider);
+      default:
+        // For any other/unknown provider, just stick with the selected model
+        return fallbackModel;
     }
   }
 }
