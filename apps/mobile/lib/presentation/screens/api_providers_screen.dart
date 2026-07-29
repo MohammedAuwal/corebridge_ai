@@ -1,8 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/ai_models.dart';
 import '../../core/di/providers.dart';
-import '../../core/providers/selected_model_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/entities/user_api_keys.dart';
 
@@ -58,61 +58,47 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     if (mounted) setState(() => _keys = updated);
   }
 
-  /// Detects a working CHAT model for the key, and — for Qwen only — a
-  /// separate VISION-capable model too, since Qwen's chat and vision
-  /// model ids differ. Silent on failure per field: if chat detection
-  /// works but vision detection doesn't (or vice versa), whichever one
-  /// succeeded still gets saved.
+  /// Persists which provider Chat should open with. Read once per app
+  /// session by ChatScreen (see defaultProviderAppliedProvider) so it
+  /// doesn't fight with manual switches made later in the same session.
+  Future<void> _setDefault(String providerKey) async {
+    await _save(_keys.copyWith(defaultProvider: providerKey));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${_providers.firstWhere((p) => p.key == providerKey).name} set as your default')),
+      );
+    }
+  }
+
   Future<void> _autoDetectModel(String providerKey, String apiKey) async {
     if (apiKey.trim().isEmpty) return;
 
     setState(() => _detectingProvider = providerKey);
-    var updated = _keys;
-    final messages = <String>[];
-
     try {
-      final chatModels = await ref.read(aiRouterClientProvider).listModels(
+      final models = await ref.read(aiRouterClientProvider).listModels(
             provider: providerKey,
             apiKey: apiKey,
           );
-      if (chatModels.isNotEmpty) {
-        updated = _applyModel(providerKey, chatModels.first);
-        messages.add('model: ${chatModels.first}');
-      }
-    } catch (_) {
-      // Falls back to AiModels.defaultFor — handled by UserApiKeys.modelFor.
-    }
 
-    if (providerKey == 'qwen') {
-      try {
-        final visionModels = await ref.read(aiRouterClientProvider).listModels(
-              provider: providerKey,
-              apiKey: apiKey,
-              capability: 'vision',
-            );
-        if (visionModels.isNotEmpty) {
-          updated = updated.copyWith(qwenVisionModel: visionModels.first);
-          messages.add('vision: ${visionModels.first}');
-        }
-      } catch (_) {
-        // Falls back to AiModels.qwenVision — handled by UserApiKeys.modelFor.
-      }
-    }
+      if (models.isEmpty) return;
 
-    if (messages.isNotEmpty) {
+      final updated = _applyModel(providerKey, models.first);
       await _save(updated);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Detected ${messages.join(', ')}')),
+          SnackBar(content: Text('Detected model for this key: ${models.first}')),
         );
       }
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Couldn't auto-detect a model for this key. Using the default — you can set one manually via \"Edit model\" if it doesn't work.")),
-      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't auto-detect a model for this key. Using the default — you can set one manually via \"Edit model\" if it doesn't work.")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _detectingProvider = null);
     }
-
-    if (mounted) setState(() => _detectingProvider = null);
   }
 
   Future<void> _showKeyDialog(_ProviderMeta provider, {bool isEdit = false}) async {
@@ -141,9 +127,16 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     );
 
     if (result != null && result.isNotEmpty) {
-      final updated = _applyKey(provider.key, result);
+      var updated = _applyKey(provider.key, result);
+      // First-ever connected provider becomes the default automatically
+      // — most users only ever connect one, and this way "def is the
+      // one in the chat screen" holds true without an extra tap.
+      final hadNoDefault = (_keys.defaultProvider ?? '').isEmpty;
+      if (hadNoDefault) {
+        updated = updated.copyWith(defaultProvider: provider.key);
+      }
       await _save(updated);
-      await _autoDetectModel(provider.key, result);
+      unawaited(_autoDetectModel(provider.key, result));
     }
   }
 
@@ -208,9 +201,11 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
 
     if (confirmed == true) {
       var updated = _applyKey(provider.key, '');
-      updated = _applyModel(provider.key, '');
-      if (provider.key == 'qwen') {
-        updated = updated.copyWith(qwenVisionModel: '');
+      updated = _applyModel(provider.key, updated);
+      // Clear the default if this provider WAS the default — leaving a
+      // default pointing at a removed key would silently break Chat.
+      if (_keys.defaultProvider == provider.key) {
+        updated = updated.copyWith(defaultProvider: '');
       }
       await _save(updated);
     }
@@ -231,7 +226,7 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
     }
   }
 
-  UserApiKeys _applyModel(String providerKey, String value) {
+  UserApiKeys _applyModel(String providerKey, [String value = '']) {
     switch (providerKey) {
       case 'claude':
         return _keys.copyWith(claudeModel: value);
@@ -250,7 +245,6 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
   Widget build(BuildContext context) {
     final connected = _providers.where((p) => (_keyFor(p.key) ?? '').isNotEmpty).toList();
     final available = _providers.where((p) => (_keyFor(p.key) ?? '').isEmpty).toList();
-    final defaultProvider = ref.watch(selectedModelProvider).provider;
 
     return Scaffold(
       appBar: AppBar(title: const Text('API Providers')),
@@ -260,7 +254,7 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
               padding: const EdgeInsets.all(20),
               children: [
                 Text(
-                  'Connect your AI provider API keys. We automatically detect which model works with your key — no need to know the exact version.',
+                  'Connect your AI provider API keys. We automatically detect which model works with your key, and your default provider is the one Chat opens with.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 20),
@@ -283,7 +277,7 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
                     child: Text('No providers connected yet.', style: Theme.of(context).textTheme.bodyMedium),
                   )
                 else
-                  ...connected.map((p) => _buildProviderTile(p, isDefault: p.key == defaultProvider)),
+                  ...connected.map((p) => _buildProviderTile(p, isDefault: p.key == _keys.defaultProvider)),
                 if (available.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   Text('Available Providers', style: Theme.of(context).textTheme.titleLarge),
@@ -326,8 +320,6 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
   Widget _buildProviderTile(_ProviderMeta provider, {required bool isDefault}) {
     final resolvedModel = _keys.modelFor(provider.key);
     final isDetecting = _detectingProvider == provider.key;
-    final isQwen = provider.key == 'qwen';
-    final resolvedVisionModel = isQwen ? _keys.modelFor(provider.key, hasImages: true) : null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -338,7 +330,6 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
         border: Border.all(color: AppColors.border),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 40,
@@ -367,11 +358,8 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
                 ),
                 if (isDetecting)
                   const Text('Detecting your model…', style: TextStyle(color: AppColors.textMuted, fontSize: 12))
-                else ...[
+                else
                   Text('Model: $resolvedModel', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                  if (isQwen && resolvedVisionModel != null)
-                    Text('Vision: $resolvedVisionModel', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                ],
               ],
             ),
           ),
@@ -400,13 +388,15 @@ class _ApiProvidersScreenState extends ConsumerState<ApiProvidersScreen> {
               if (value == 'edit') _showKeyDialog(provider, isEdit: true);
               if (value == 'model') _showModelDialog(provider);
               if (value == 'redetect') _autoDetectModel(provider.key, _keyFor(provider.key) ?? '');
+              if (value == 'setDefault') _setDefault(provider.key);
               if (value == 'remove') _removeKey(provider);
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'edit', child: Text('Edit key')),
-              PopupMenuItem(value: 'model', child: Text('Edit model')),
-              PopupMenuItem(value: 'redetect', child: Text('Re-detect model')),
-              PopupMenuItem(value: 'remove', child: Text('Remove key')),
+            itemBuilder: (context) => [
+              if (!isDefault) const PopupMenuItem(value: 'setDefault', child: Text('Set as default')),
+              const PopupMenuItem(value: 'edit', child: Text('Edit key')),
+              const PopupMenuItem(value: 'model', child: Text('Edit model')),
+              const PopupMenuItem(value: 'redetect', child: Text('Re-detect model')),
+              const PopupMenuItem(value: 'remove', child: Text('Remove key')),
             ],
           ),
         ],

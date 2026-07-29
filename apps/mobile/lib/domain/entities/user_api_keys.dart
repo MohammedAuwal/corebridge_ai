@@ -1,18 +1,8 @@
 import '../../core/constants/ai_models.dart';
 
-/// Per-user, per-provider API keys AND model strings.
-///
-/// The model fields are the whole point of "bring your own model": a
-/// user's Claude key might only work with claude-sonnet-5, another
-/// user's with claude-opus-4-8. We never hardcode a version in the app
-/// — whatever gets auto-detected for the user's own key (or what they
-/// type manually, or today's recommended default as a last resort) is
-/// what actually gets sent to ai-router.
-///
-/// qwenVisionModel is separate from qwenModel because Qwen's chat-tier
-/// models (e.g. qwen3.7-max) and vision-capable models (the "-vl-"
-/// line) are often different model ids on Alibaba's side — a message
-/// with an image attached needs the vision one specifically.
+/// Per-user, per-provider API keys, model strings, and a default
+/// provider choice — so a user only has to pick "Claude" once in
+/// Settings and every new chat opens with that provider pre-selected.
 class UserApiKeys {
   final String? claude;
   final String? openai;
@@ -24,7 +14,11 @@ class UserApiKeys {
   final String? geminiModel;
   final String? qwenModel;
 
-  final String? qwenVisionModel;
+  /// Provider key ('claude'/'openai'/'gemini'/'qwen') the user picked as
+  /// their default in API Providers. Null/empty means no preference set
+  /// yet — the app falls back to whatever selectedModelProvider was
+  /// already seeded with (Claude).
+  final String? defaultProvider;
 
   const UserApiKeys({
     this.claude,
@@ -35,7 +29,7 @@ class UserApiKeys {
     this.openaiModel,
     this.geminiModel,
     this.qwenModel,
-    this.qwenVisionModel,
+    this.defaultProvider,
   });
 
   factory UserApiKeys.fromMap(Map<String, dynamic>? map) {
@@ -49,7 +43,7 @@ class UserApiKeys {
       openaiModel: map['openaiModel'] as String?,
       geminiModel: map['geminiModel'] as String?,
       qwenModel: map['qwenModel'] as String?,
-      qwenVisionModel: map['qwenVisionModel'] as String?,
+      defaultProvider: map['defaultProvider'] as String?,
     );
   }
 
@@ -63,7 +57,7 @@ class UserApiKeys {
       if (openaiModel != null) 'openaiModel': openaiModel,
       if (geminiModel != null) 'geminiModel': geminiModel,
       if (qwenModel != null) 'qwenModel': qwenModel,
-      if (qwenVisionModel != null) 'qwenVisionModel': qwenVisionModel,
+      if (defaultProvider != null) 'defaultProvider': defaultProvider,
     };
   }
 
@@ -82,24 +76,7 @@ class UserApiKeys {
     }
   }
 
-  /// The model string to actually send to ai-router for [provider].
-  ///
-  /// hasImages: when true and provider is 'qwen', resolves to the
-  /// user's detected vision-capable model instead of their regular
-  /// chat model override — Qwen's chat and vision model ids are often
-  /// different, unlike Claude/OpenAI/Gemini where the default chat
-  /// model already handles images.
-  String modelFor(String provider, {bool hasImages = false}) {
-    if (hasImages && provider == 'qwen') {
-      final visionOverride = qwenVisionModel?.trim();
-      if (visionOverride != null && visionOverride.isNotEmpty) return visionOverride;
-      // No vision model detected yet for this key (e.g. key was
-      // connected before this feature existed, or detection failed).
-      // Falls back to the flagged-as-unverified constant as a last
-      // resort rather than failing outright.
-      return AiModels.qwenVision;
-    }
-
+  String modelFor(String provider) {
     final override = _modelOverrideFor(provider)?.trim();
     if (override != null && override.isNotEmpty) return override;
     return AiModels.defaultFor(provider);
@@ -129,7 +106,7 @@ class UserApiKeys {
     String? openaiModel,
     String? geminiModel,
     String? qwenModel,
-    String? qwenVisionModel,
+    String? defaultProvider,
   }) {
     return UserApiKeys(
       claude: claude ?? this.claude,
@@ -140,7 +117,7 @@ class UserApiKeys {
       openaiModel: openaiModel ?? this.openaiModel,
       geminiModel: geminiModel ?? this.geminiModel,
       qwenModel: qwenModel ?? this.qwenModel,
-      qwenVisionModel: qwenVisionModel ?? this.qwenVisionModel,
+      defaultProvider: defaultProvider ?? this.defaultProvider,
     );
   }
 }

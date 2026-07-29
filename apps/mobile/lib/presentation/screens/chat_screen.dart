@@ -23,25 +23,76 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final List<MessageEntity> _messages = [];
   final Set<String> _errorMessageIds = {};
+  final ScrollController _scrollController = ScrollController();
   bool _isSending = false;
   bool _isLoadingHistory = false;
+  bool _showScrollToBottom = false;
   String? _conversationId;
   Future<void>? _conversationCreation;
   CancelToken? _activeCancelToken;
 
+  static const double _scrollButtonThreshold = 200;
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_handleScroll);
+
     _conversationId = ref.read(activeConversationIdProvider);
 
     if (_conversationId != null) {
       _loadExistingConversation(_conversationId!);
     }
 
+    if (!ref.read(defaultProviderAppliedProvider)) {
+      _applyDefaultProviderIfSet();
+    }
+
     final draft = ref.read(draftMessageProvider);
     if (draft.trim().isNotEmpty) {
       ref.read(draftMessageProvider.notifier).state = '';
       WidgetsBinding.instance.addPostFrameCallback((_) => _send(draft, []));
+    }
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+    final distanceFromBottom = _scrollController.position.maxScrollExtent - _scrollController.offset;
+    final shouldShow = distanceFromBottom > _scrollButtonThreshold;
+    if (shouldShow != _showScrollToBottom) {
+      setState(() => _showScrollToBottom = shouldShow);
+    }
+  }
+
+  void _scrollToBottom({bool animate = true}) {
+    if (!_scrollController.hasClients) return;
+    final target = _scrollController.position.maxScrollExtent;
+    if (animate) {
+      _scrollController.animateTo(target, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    } else {
+      _scrollController.jumpTo(target);
+    }
+  }
+
+  /// If the user set a default provider in API Providers, switch the
+  /// picker to it once per app session. Runs regardless of whether a
+  /// default is found, so we don't keep re-fetching on every ChatScreen
+  /// visit — see defaultProviderAppliedProvider's doc comment.
+  Future<void> _applyDefaultProviderIfSet() async {
+    final uid = ref.read(firebaseServiceProvider).currentUserId;
+    if (uid == null) return;
+
+    try {
+      final apiKeys = await ref.read(userSettingsRepositoryProvider).getApiKeys(uid);
+      final defaultProvider = apiKeys.defaultProvider;
+      if (defaultProvider != null && defaultProvider.isNotEmpty) {
+        final match = availableModels.where((m) => m.provider == defaultProvider);
+        if (match.isNotEmpty) {
+          ref.read(selectedModelProvider.notifier).state = match.first;
+        }
+      }
+    } finally {
+      ref.read(defaultProviderAppliedProvider.notifier).state = true;
     }
   }
 
@@ -54,6 +105,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _messages.clear();
           _messages.addAll(messages);
         });
+        // Resuming from History should land on the last message, not
+        // the top of a long conversation — jump (no animation) since
+        // this is an initial load, not a live update.
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom(animate: false));
       }
     } finally {
       if (mounted) setState(() => _isLoadingHistory = false);
@@ -111,6 +166,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         createdAt: DateTime.now(),
       ));
     });
+    // Sending is a deliberate user action — always follow to the bottom
+    // for it, regardless of where they'd scrolled to.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
     final placeholderId = '${DateTime.now().millisecondsSinceEpoch}-assistant';
     setState(() {
@@ -161,6 +219,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               isThinkingStreaming: false,
             );
           });
+        }
+
+        // Only auto-follow the streaming reply if the user is already
+        // near the bottom — if they've scrolled up to reread something
+        // earlier, we shouldn't yank them back down mid-response.
+        if (!_showScrollToBottom) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom(animate: false));
         }
       }
     } catch (e) {
@@ -217,6 +282,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void dispose() {
     _activeCancelToken?.cancel();
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -230,26 +297,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             children: [
               const ModelSelectorBar(),
               Expanded(
-                child: _isLoadingHistory
-                    ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue))
-                    : _messages.isEmpty
-                        ? const _EmptyChatState()
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _messages.length,
-                            itemBuilder: (context, index) {
-                              final message = _messages[index];
-                              final isError = _errorMessageIds.contains(message.id);
+                child: Stack(
+                  children: [
+                    _isLoadingHistory
+                        ? const Center(child: CircularProgressIndicator(color: AppColors.accentBlue))
+                        : _messages.isEmpty
+                            ? const _EmptyChatState()
+                            : ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.all(16),
+                                itemCount: _messages.length,
+                                itemBuilder: (context, index) {
+                                  final message = _messages[index];
+                                  final isError = _errorMessageIds.contains(message.id);
 
-                              return ChatMessageBubble(
-                                message: message,
-                                isError: isError,
-                                onRewrite: (!isError && message.role == MessageRole.assistant && !message.isStreaming)
-                                    ? () => _rewrite(message)
-                                    : null,
-                              );
-                            },
-                          ),
+                                  return ChatMessageBubble(
+                                    message: message,
+                                    isError: isError,
+                                    onRewrite: (!isError && message.role == MessageRole.assistant && !message.isStreaming)
+                                        ? () => _rewrite(message)
+                                        : null,
+                                  );
+                                },
+                              ),
+                    if (_showScrollToBottom)
+                      Positioned(
+                        right: 16,
+                        bottom: 16,
+                        child: _ScrollToBottomButton(onTap: () => _scrollToBottom()),
+                      ),
+                  ],
+                ),
               ),
               ChatComposer(
                 onSend: _send,
@@ -259,6 +337,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ScrollToBottomButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ScrollToBottomButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surfaceRaised,
+      shape: const CircleBorder(),
+      elevation: 4,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.border),
+          ),
+          alignment: Alignment.center,
+          child: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.accentBlue, size: 24),
+        ),
       ),
     );
   }

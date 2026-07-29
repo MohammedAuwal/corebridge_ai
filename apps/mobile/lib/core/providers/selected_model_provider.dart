@@ -1,10 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// A provider option in the UI picker. Deliberately has NO model field —
-/// the picker only ever selects a brand (Claude / ChatGPT / Gemini /
-/// Qwen). The actual model string is resolved per-user at send time
-/// from UserApiKeys.modelFor(provider), since different users' API
-/// keys work with different model versions and we can't know which.
 class AiModelOption {
   final String provider;
   final String label;
@@ -27,10 +22,14 @@ final availableModels = <AiModelOption>[
 
 final selectedModelProvider = StateProvider<AiModelOption>((ref) => availableModels.first);
 
-/// Whether the user has switched on "show thinking" for models that
-/// support it. Has no effect for providers where supportsThinking is
-/// false (the toggle is hidden in the UI for those).
 final thinkingModeEnabledProvider = StateProvider<bool>((ref) => false);
 
-/// Carries a draft message typed on Home into the Chat screen.
 final draftMessageProvider = StateProvider<String>((ref) => '');
+
+/// Guards against re-applying the user's saved default provider every
+/// time ChatScreen is opened in the same app session — set once, true
+/// after the first apply attempt (whether or not a default existed).
+/// Without this, switching providers mid-session and then navigating
+/// away and back to Chat would silently snap back to the saved default,
+/// which would be confusing rather than helpful.
+final defaultProviderAppliedProvider = StateProvider<bool>((ref) => false);
